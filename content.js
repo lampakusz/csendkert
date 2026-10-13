@@ -765,7 +765,8 @@ CK.habits = [
   { id: "kivancsisag", t: "Ítélet helyett egy kíváncsi kérdés", a: "elfogadas" },
   { id: "dontes", t: "Egy döntés egyedül, megerősítés nélkül", a: "onallosag" },
   { id: "kedvesseg", t: "Egy kedves mondat magamnak", a: "magabiztossag" },
-  { id: "hala", t: "Három dolog, amiért hálás vagyok", a: "irigyseg" }
+  { id: "hala", t: "Három dolog, amiért hálás vagyok", a: "irigyseg" },
+  { id: "mozgas", t: "Legalább 20 perc mozgás", a: "magabiztossag" }
 ];
 
 CK.moods = [
@@ -777,3 +778,30 @@ CK.moods = [
 ];
 
 CK.emotions = ["nyugalom", "öröm", "hála", "remény", "büszkeség", "kíváncsiság", "fáradtság", "szorongás", "irigység", "harag", "sértettség", "csalódottság", "szomorúság", "magány", "bizonytalanság", "szégyen", "türelmetlenség", "feszültség"];
+
+/* ---------------- MOZGÁS ---------------- */
+CK.moveTypes = [
+  { id: "gym", l: "Edzőterem", i: "dumbbell" },
+  { id: "run", l: "Futás", i: "run" },
+  { id: "walk", l: "Séta", i: "walk" },
+  { id: "yoga", l: "Jóga, nyújtás", i: "lotus" }
+];
+
+CK.workouts = [
+  { id: "also", name: "Láb és core", min: 40, warm: "5 perc szobabicikli vagy evezőgép",
+    ex: [["Serleg guggolás", 3, "10"], ["Román felhúzás kézisúlyzóval", 3, "10"], ["Hátralépéses kitörés", 3, "8 / láb"], ["Csípőemelés padon", 3, "12"], ["Plank", 3, "30 mp"]] },
+  { id: "felso", name: "Hát, mell, váll", min: 40, warm: "5 perc evezőgép + vállkörzés",
+    ex: [["Csigás lehúzás", 3, "10"], ["Fekvenyomás kézisúlyzóval", 3, "10"], ["Ülő evezés", 3, "12"], ["Vállból nyomás ülve", 3, "10"], ["Dead bug", 3, "10"]] },
+  { id: "teljes", name: "Teljes test, 30 perc", min: 30, warm: "3 perc könnyű kardió",
+    ex: [["Guggolás", 3, "12"], ["Fekvőtámasz (akár térdelve)", 3, "8"], ["Egykezes evezés", 3, "10 / kar"], ["Farizomhíd", 3, "15"], ["Madár-kutya", 3, "8 / oldal"]] }
+];
+
+/* futás–séta program: [bemelegítő séta mp, ismétlés, futás mp, séta mp, levezető séta mp] */
+CK.runPlan = [
+  { id: 1, name: "1. szint", d: "8 × 1 perc futás", p: [300, 8, 60, 90, 300] },
+  { id: 2, name: "2. szint", d: "6 × 2 perc futás", p: [300, 6, 120, 90, 300] },
+  { id: 3, name: "3. szint", d: "5 × 3 perc futás", p: [300, 5, 180, 90, 300] },
+  { id: 4, name: "4. szint", d: "4 × 5 perc futás", p: [300, 4, 300, 120, 300] },
+  { id: 5, name: "5. szint", d: "3 × 8 perc futás", p: [300, 3, 480, 120, 300] },
+  { id: 6, name: "6. szint", d: "20 perc folyamatos futás", p: [300, 1, 1200, 0, 300] }
+];

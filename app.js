@@ -7,7 +7,7 @@
 
   /* ---------- állapot ---------- */
   const KEY = "csendkert.v1";
-  const DEF = { name: "Laura", answers: {}, testIdx: 0, results: null, plan: [], done: {}, steps: {}, reflect: {}, journal: [], habits: {}, challengeStart: null, values: [], valueNotes: {}, seconds: 0, activity: {}, sound: true, speak: false, music: true };
+  const DEF = { name: "Laura", answers: {}, testIdx: 0, results: null, plan: [], done: {}, steps: {}, reflect: {}, journal: [], habits: {}, challengeStart: null, values: [], valueNotes: {}, seconds: 0, activity: {}, sound: true, speak: false, music: true, workouts: [], moveGoal: 3, runLevel: 0 };
   let S;
   try { S = Object.assign(JSON.parse(JSON.stringify(DEF)), JSON.parse(localStorage.getItem(KEY) || "{}")); }
   catch (e) { S = JSON.parse(JSON.stringify(DEF)); }
@@ -24,7 +24,7 @@
     let auth = null, db = null, user = null, timer = null, busy = false, lastSync = null, onChange = () => {};
     const LINKED = KEY + ".linked"; // ezen az eszközön már összefésültük-e a felhővel
     const EMAIL = KEY + ".email";   // a belépési link visszaigazolásához
-    const hasLocal = () => S.plan.length || S.journal.length || Object.keys(S.answers).length || Object.keys(S.activity).length;
+    const hasLocal = () => S.plan.length || S.journal.length || (S.workouts || []).length || Object.keys(S.answers).length || Object.keys(S.activity).length;
     const ref = () => db.collection("progress").doc(user.uid);
 
     async function push() {
@@ -107,6 +107,9 @@
   const LESSON = Object.fromEntries(CK.lessons.map((l) => [l.id, l]));
   const MED = Object.fromEntries(CK.meditations.map((m) => [m.id, m]));
   const BR = Object.fromEntries(CK.breathing.map((b) => [b.id, b]));
+  const WO = Object.fromEntries(CK.workouts.map((w) => [w.id, w]));
+  const RUN = Object.fromEntries(CK.runPlan.map((r) => [r.id, r]));
+  const MT = Object.fromEntries(CK.moveTypes.map((t) => [t.id, t]));
   const ac = (id) => `var(--a-${id})`;
 
   /* ---------- ikonok ---------- */
@@ -137,6 +140,9 @@
     m2: '<path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11.5 1.5A3.3 3.3 0 0 0 7 18z"/>',
     m3: '<path d="M4 9h16M4 13h12M4 17h8"/>',
     m4: '<circle cx="9" cy="9" r="3"/><path d="M9 3v1M3 9h1M4.8 4.8l.7.7M13.2 4.8l-.7.7"/><path d="M10 20h8a3.3 3.3 0 0 0 0-6.6 5 5 0 0 0-9.4 1.3A2.7 2.7 0 0 0 10 20z"/>',
+    dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
+    run: '<circle cx="15" cy="4.5" r="1.8"/><path d="M7.5 21l3.2-5.5 3.3 2.5v4"/><path d="M5 11l3.5-3 4.5.8 2.2 3.2 3.3 1"/><path d="M10.7 15.5L13 8.8"/>',
+    walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M9.5 21l2.3-6.2 2.7 2.7V21"/><path d="M8.5 12.5l2.2-4.6 3 1.1 1.6 3.4"/><path d="M11.8 14.8l-1.1-6.9"/>',
     m5: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'
   };
   const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ""}</svg>`;
@@ -292,11 +298,12 @@
   const toolHref = (t) => t.type === "med" ? "#meditacio-" + t.id : t.type === "breath" ? "#legzes-" + t.id : "#" + t.id;
 
   /* ---------- navigáció ---------- */
-  const NAV = [["kezdolap", "Kezdőlap", "home"], ["utam", "Az utam", "path"], ["tananyag", "Tananyag", "book"], ["gyakorlas", "Gyakorlás", "lotus"], ["naplo", "Napló", "pen"]];
+  const NAV = [["kezdolap", "Kezdőlap", "home"], ["utam", "Az utam", "path"], ["tananyag", "Tananyag", "book"], ["gyakorlas", "Gyakorlás", "lotus"], ["mozgas", "Mozgás", "run"], ["naplo", "Napló", "pen"]];
   function navGroup(h) {
     if (h.startsWith("lecke-") || h === "tananyag") return "tananyag";
     if (h === "utam" || h === "teszt") return "utam";
     if (h === "naplo") return "naplo";
+    if (h === "mozgas" || h.startsWith("edzes-") || h.startsWith("futas-")) return "mozgas";
     if (h === "kezdolap" || h === "beallitasok") return "kezdolap";
     return "gyakorlas";
   }
@@ -309,7 +316,7 @@
   const ROUTES = {
     kezdolap: vHome, teszt: vTest, utam: vPath, tananyag: vLibrary, gyakorlas: vPractice, naplo: vJournal,
     "irigyseg-atalakito": () => vWizard("irigyseg"), "itelet-atalakito": () => vWizard("itelet"),
-    ertekek: vValues, kartya: vCards, kihivas: vChallenge, idozito: vTimer, beallitasok: vSettings, legzes: () => vBreathList(), meditacio: () => vMedList()
+    ertekek: vValues, kartya: vCards, kihivas: vChallenge, idozito: vTimer, beallitasok: vSettings, mozgas: vMove, legzes: () => vBreathList(), meditacio: () => vMedList()
   };
   function route() {
     cleanup();
@@ -320,6 +327,8 @@
     if (h.startsWith("lecke-") && LESSON[h.slice(6)]) html = vLesson(h.slice(6));
     else if (h.startsWith("legzes-") && BR[h.slice(7)]) html = vBreath(h.slice(7));
     else if (h.startsWith("meditacio-") && MED[h.slice(10)]) html = vMed(h.slice(10));
+    else if (h.startsWith("edzes-") && WO[h.slice(6)]) html = vGym(h.slice(6));
+    else if (h.startsWith("futas-") && RUN[h.slice(6)]) html = vRun(h.slice(6));
     else html = (ROUTES[h] || vHome)();
     if (typeof html === "string") { view.innerHTML = `<div class="fade-in">${html}</div>`; }
     if (view._after) { const f = view._after; view._after = null; f(view); }
@@ -347,7 +356,7 @@
         <div class="stack">
           <p class="greet">${greet()}, ${esc(S.name)}.</p>
           <h1>Egy csendes hely,<br>ahol önmagadra figyelhetsz.</h1>
-          <p class="lead">Napi 10–15 perc tanítás, gyakorlat és csend, a keleti bölcsesség és a mai pszichológia segítségével.</p>
+          <p class="lead">Napi pár perc csend, tanítás és mozgás.</p>
         </div>
         <div class="hero-art">
           <svg viewBox="0 0 260 110" aria-hidden="true">
@@ -366,13 +375,8 @@
       <section class="card stack">
         <span class="eyebrow">Első lépés</span>
         <h2>Önismereti felmérő</h2>
-        <p class="muted">28 rövid állítás, körülbelül 6 perc. A válaszaid alapján összeállítjuk a te személyes utadat: azokat a leckéket és gyakorlatokat, amelyek most a legtöbbet adhatják neked.</p>
-        <div class="row"><a class="btn" href="#teszt">Felmérő indítása ${ic("arrowR").replace("<svg", '<svg width="18" height="18"')}</a><a class="btn ghost" href="#tananyag">Előbb körülnézek</a></div>
-      </section>
-      <section class="steps3">
-        <div><span class="n">1</span><b>Felmérő</b><p class="small muted">Őszinte válaszok hat területen: jelenlét, együttörülés, jóindulat, elfogadás, önállóság, magabiztosság.</p></div>
-        <div><span class="n">2</span><b>Személyes út</b><p class="small muted">A gyengébb területeidre összeállított lecke-sorrend, keleti tanításokkal és gyakorlatokkal.</p></div>
-        <div><span class="n">3</span><b>Napi gyakorlás</b><p class="small muted">Légzés, vezetett meditáció, napló és egy 21 napos kihívás, hogy a változás beépüljön.</p></div>
+        <p class="muted">28 rövid állítás, kb. 6 perc. Ebből áll össze a személyes utad.</p>
+        <div class="row"><a class="btn" href="#teszt">Indítás ${ic("arrowR").replace("<svg", '<svg width="18" height="18"')}</a><a class="btn ghost" href="#tananyag">Előbb körülnézek</a></div>
       </section>`;
     } else {
       const focus = r.order.filter((id) => r.areas[id].level === "focus");
@@ -385,31 +389,35 @@
             <span class="row small muted" style="gap:8px"><i class="dot"></i>${AREA[L.area].full} · ${L.min} perc</span>
             <h2>${L.title}</h2><p class="muted">${L.lead}</p></div>
             <div class="row"><a class="btn" href="#lecke-${L.id}">Lecke megnyitása</a><a class="btn ghost" href="#utam">Az egész út</a></div>`
-          : `<h2>Gratulálok, ${esc(S.name)}!</h2><p class="muted">Minden leckét teljesítettél az utadon. Most érdemes újra kitölteni a felmérőt, és megnézni, mi változott.</p><div class="row"><a class="btn" href="#teszt" data-retake>Felmérő újra</a><a class="btn ghost" href="#tananyag">Tananyag böngészése</a></div>`}
+          : `<h2>Gratulálok, ${esc(S.name)}!</h2><p class="muted">Minden leckét teljesítettél. Nézd meg, mi változott.</p><div class="row"><a class="btn" href="#teszt" data-retake>Felmérő újra</a><a class="btn ghost" href="#tananyag">Tananyag böngészése</a></div>`}
         <div class="row small muted" style="gap:8px">Fókuszterületeid: ${focus.map((id) => `<span class="chip" style="color:${ac(id)}"><i class="dot" style="--c:${ac(id)}"></i>${AREA[id].name}</span>`).join("")}</div>
       </section>`;
     }
     const todayH = S.habits[today()] || {}; const hcount = Object.values(todayH).filter(Boolean).length;
+    const wkN = weekWorkouts().length, goal = S.moveGoal || 3;
+    const quick = (href, icon, t) => `<a class="card linkcard quick" href="${href}"><span class="icon-tile">${ic(icon)}</span><span class="t">${t}</span></a>`;
     after((v) => { const rt = $("[data-retake]", v); if (rt) rt.addEventListener("click", () => { S.answers = {}; S.testIdx = 0; save(); }); });
     return `<div class="col">
       ${hero}
       ${mainCard}
+      <a class="card move-home" href="#mozgas">
+        <span class="icon-tile">${ic("run")}</span>
+        <div class="stack" style="gap:2px;min-width:0"><b>Mozgás ezen a héten</b><span class="small muted">${wkN >= goal ? "Megvan a heti cél!" : `Még ${goal - wkN} edzés a heti célig`}</span></div>
+        <b class="big-n num">${wkN}<span> / ${goal}</span></b>
+      </a>
       <section class="stats">
-        <div><b>${doneN}</b><span>teljesített lecke</span></div>
-        <div><b>${mins}</b><span>perc gyakorlás</span></div>
-        <div><b>${S.journal.length}</b><span>naplóbejegyzés</span></div>
+        <div><b>${doneN}</b><span>lecke</span></div>
+        <div><b>${mins}</b><span>perc csend</span></div>
+        <div><b>${S.workouts.length}</b><span>edzés</span></div>
         <div><b>${days}</b><span>aktív nap</span></div>
       </section>
-      <section class="wisdom"><span class="eyebrow" style="position:relative">A nap bölcsessége</span><q style="margin-top:10px">${w[0]}</q><cite>${w[1]}</cite><span class="glyph">道</span></section>
-      <section class="stack">
-        <h3>Gyors gyakorlás</h3>
-        <div class="grid3">
-          <a class="card linkcard" href="#legzes-doboz"><span class="icon-tile">${ic("wind")}</span><span class="t">Dobozlégzés</span><span class="d">2 perc fókusz egy nehéz helyzet előtt.</span></a>
-          <a class="card linkcard" href="#meditacio-felhok"><span class="icon-tile">${ic("lotus")}</span><span class="t">Felhők az égen</span><span class="d">6 perces vezetett meditáció.</span></a>
-          <a class="card linkcard" href="#kihivas"><span class="icon-tile">${ic("calendar")}</span><span class="t">Mai szokások</span><span class="d">${S.challengeStart ? `Ma ${hcount} / ${CK.habits.length} kész.` : "Indítsd el a 21 napos kihívást."}</span></a>
-        </div>
+      <section class="wisdom"><q>${w[0]}</q><cite>${w[1]}</cite></section>
+      <section class="grid4">
+        ${quick("#legzes-doboz", "wind", "Légzés")}
+        ${quick("#meditacio-felhok", "lotus", "Meditáció")}
+        ${quick("#mozgas", "dumbbell", "Edzés")}
+        ${quick("#kihivas", "calendar", S.challengeStart ? `Szokások ${hcount}/${CK.habits.length}` : "21 nap")}
       </section>
-      <p class="footer-note">A Csendkert önismereti és személyiségfejlesztő gyakorlatokat kínál, nem helyettesíti a pszichológiai segítséget. Ha tartósan nehéz időszakon mész át, érdemes szakemberhez fordulni. Minden válaszod és jegyzeted csak ebben a böngészőben tárolódik.</p>
     </div>`;
   }
 
@@ -426,14 +434,9 @@
       });
       return `<div class="col">
         <div class="stack"><span class="eyebrow">Önismereti felmérő</span><h1>Hol tartasz most?</h1>
-        <p class="muted" style="font-size:1.08rem">${n} állítás következik. Mindegyiknél jelöld, mennyire jellemző rád <em>mostanában</em>, az elmúlt néhány hónapban.</p></div>
+        <p class="muted">${n} állítás · kb. 6 perc · nincs jó vagy rossz válasz</p></div>
         <section class="card stack">
-          <div class="stack" style="gap:10px">
-            <p>${ic("check").replace("<svg", '<svg width="18" height="18" style="vertical-align:-3px;color:var(--jade)"')} Nincsenek jó vagy rossz válaszok. Minden állításban ott van valami, ami mindenkire igaz néha.</p>
-            <p>${ic("check").replace("<svg", '<svg width="18" height="18" style="vertical-align:-3px;color:var(--jade)"')} Az első megérzésed általában a legpontosabb. Ne gondold túl.</p>
-            <p>${ic("check").replace("<svg", '<svg width="18" height="18" style="vertical-align:-3px;color:var(--jade)"')} A válaszaidat senki más nem látja, csak ebben a böngészőben tárolódnak.</p>
-            <p>${ic("check").replace("<svg", '<svg width="18" height="18" style="vertical-align:-3px;color:var(--jade)"')} Gyorsan válaszolhatsz az 1–5 billentyűkkel is.</p>
-          </div>
+          <p>${ic("check").replace("<svg", '<svg width="18" height="18" style="vertical-align:-3px;color:var(--jade)"')} Az első megérzésed a legpontosabb.</p>
           ${answered && answered < n ? `<label class="toggle"><input type="checkbox" id="restart"> Elölről kezdem (${answered} válasz már megvan)</label>` : ""}
           <div class="row"><button class="btn" id="start">${answered && answered < n ? "Folytatás" : "Kezdjük"}</button></div>
         </section></div>`;
@@ -491,8 +494,8 @@
   }
   function vPath() {
     const r = S.results;
-    if (!r) return `<div class="col"><div class="stack"><span class="eyebrow">Az utam</span><h1>Még nincs személyes utad</h1>
-      <p class="muted">A felmérő kitöltése után itt látod majd, mely területekre érdemes most figyelned, és milyen sorrendben haladj a leckékkel.</p></div>
+    if (!r) return `<div class="col"><div class="stack"><h1>Még nincs személyes utad</h1>
+      <p class="muted">A felmérő után itt látod a fókuszterületeidet és a leckesorrendet.</p></div>
       <div class="row"><a class="btn" href="#teszt">Felmérő indítása</a></div></div>`;
     const sorted = ["jelenlet", ...r.order];
     const focus = r.order.filter((id) => r.areas[id].level === "focus");
@@ -502,8 +505,7 @@
     after((v) => { $("#retake", v).addEventListener("click", () => { S.answers = {}; S.testIdx = 0; testStarted = true; save(); location.hash = "#teszt"; }); });
     return `<div class="col wide">
       <div class="stack"><span class="eyebrow">Az utam · felmérés: ${huDate(r.date)}</span>
-        <h1>${esc(S.name)}, ez most a te utad</h1>
-        <p class="muted" style="max-width:42rem;font-size:1.06rem">A diagram azt mutatja, mennyire érzed erősnek magad az egyes területeken. A kisebb értékek nem hibák. Ezek azok a helyek, ahol most a legtöbbet nőhetsz.</p></div>
+        <h1>${esc(S.name)}, ez most a te utad</h1></div>
       <section class="card radar-wrap">
         <div>${radar(r)}</div>
         <div class="stack">
@@ -512,25 +514,22 @@
       </section>
       <section class="grid2">
         <div class="card stack"><span class="eyebrow">Fő fókusz</span>
-          ${focus.map((id) => `<div class="stack" style="gap:4px"><h3 style="color:${ac(id)}">${AREA[id].full} <span class="small muted">· ${AREA[id].pali}</span></h3><p class="small">${AREA[id].desc}</p></div>`).join("")}
-          ${allHigh ? `<p class="small muted">Minden területen viszonylag erősnek érzed magad. Ezek a te relatív növekedési pontjaid.</p>` : ""}
+          ${focus.map((id) => `<div class="stack" style="gap:4px"><h3 style="color:${ac(id)}">${AREA[id].full} <span class="small muted">· ${AREA[id].pali}</span></h3><p class="small">${AREA[id].short}</p></div>`).join("")}
         </div>
         <div class="card stack"><span class="eyebrow">Amire építhetsz</span>
-          ${strong.length ? strong.map((id) => `<div class="stack" style="gap:4px"><h3 style="color:${ac(id)}">${AREA[id].full}</h3><p class="small muted">${AREA[id].short} Ez most az egyik erősséged, támaszkodj rá a többi terület fejlesztésében.</p></div>`).join("") : `<p class="small muted">Most minden terület fejlődési lehetőség. Ez nem baj: így minden lépés látható változást hozhat. A jelenléttel kezdünk, mert az mindenre hat.</p>`}
-          <p class="small muted">A jelenlét leckéi minden út elején állnak, mert az önmegfigyelés nélkül a többi gyakorlat sem tud gyökeret ereszteni.</p>
+          ${strong.length ? strong.map((id) => `<div class="stack" style="gap:4px"><h3 style="color:${ac(id)}">${AREA[id].full}</h3><p class="small muted">${AREA[id].short}</p></div>`).join("") : `<p class="small muted">Most minden terület fejlődési lehetőség.</p>`}
         </div>
       </section>
       <section class="card stack">
         <div class="row between"><div class="stack" style="gap:4px"><span class="eyebrow">Személyes leckesorrend</span><h2>${S.plan.length} lecke, a te tempódban</h2></div>
         ${nx ? `<a class="btn" href="#lecke-${nx}">Folytatás</a>` : ""}</div>
-        <p class="small muted">Javaslat: hetente 2–3 lecke, közben naponta néhány perc gyakorlás. Egy-egy lecke feladatával érdemes 2–3 napig élni, mielőtt továbblépsz.</p>
         <ol class="path">
           ${S.plan.map((id, k) => { const L = LESSON[id]; const st = S.done[id] ? "done" : id === nx ? "next" : ""; return `<li class="${st}"><span class="idx">${S.done[id] ? ic("check").replace("<svg", '<svg width="14" height="14"') : k + 1}</span>
             <div class="stack" style="gap:2px;min-width:0"><a href="#lecke-${id}">${L.title}</a><span class="meta"><i class="dot" style="--c:${ac(L.area)}"></i>${AREA[L.area].name} · ${L.min} perc</span></div>
             ${id === nx ? '<span class="chip focus">Következő</span>' : S.done[id] ? '<span class="chip dev">Kész</span>' : ""}</li>`; }).join("")}
         </ol>
       </section>
-      <div class="row"><button class="btn ghost" id="retake">Felmérő újra kitöltése</button><span class="small muted">Az elvégzett leckék és a napló megmaradnak.</span></div>
+      <div class="row"><button class="btn ghost" id="retake">Felmérő újra</button></div>
     </div>`;
   }
 
@@ -548,7 +547,7 @@
         return `<section class="stack" style="--c:${ac(a.id)};gap:16px">
           <div class="area-head"><div class="area-glyph" aria-hidden="true">${a.glyph}</div>
             <div class="stack" style="gap:6px"><div class="row" style="gap:10px"><h2>${a.full}</h2>${S.results ? levelChip(S.results.areas[a.id].level) : ""}</div>
-            <span class="small muted">${a.pali} · ${d}/${ls.length} kész</span><p class="muted" style="max-width:44rem">${a.desc}</p></div></div>
+            <span class="small muted">${a.pali} · ${d}/${ls.length} kész · ${a.short}</span></div></div>
           <div class="lesson-list">${ls.map((l) => `<a class="lesson-item" href="#lecke-${l.id}"><span class="t">${l.title}</span><span class="l">${l.lead}</span>
             <span class="foot">${S.done[l.id] ? `<span class="check">${ic("check")}</span> Kész ·` : ""} ${l.min} perc ${inPlan.has(l.id) && !S.done[l.id] ? '<span class="chip dev">Az utadon</span>' : ""}</span></a>`).join("")}</div>
         </section>`;
@@ -557,9 +556,8 @@
     };
     after((v) => { $$(".seg button", v).forEach((b) => b.addEventListener("click", () => { libFilter = b.dataset.f; draw(); })); draw(); });
     return `<div class="col wide">
-      <div class="row between" style="align-items:end"><div class="stack"><span class="eyebrow">Tananyag</span><h1>Hat terület, harminc lecke</h1>
-      <p class="muted" style="max-width:40rem">Minden lecke egy keleti tanításra épül: buddhista szövegekre, a Tao Te Kingre, Konfuciuszra, a Bhagavad Gítára és a zen hagyományra, és mindegyikhez tartozik egy gyakorlat és egy napi feladat.</p></div>
-      ${S.plan.length ? `<div class="seg" role="group" aria-label="Szűrés"><button data-f="all">Minden lecke</button><button data-f="plan">Csak az utam</button></div>` : ""}</div>
+      <div class="row between" style="align-items:end"><div class="stack"><h1>Tananyag</h1></div>
+      ${S.plan.length ? `<div class="seg" role="group" aria-label="Szűrés"><button data-f="all">Mind</button><button data-f="plan">Az utam</button></div>` : ""}</div>
       <div id="libs" class="stack" style="gap:44px"></div></div>`;
   }
 
@@ -602,12 +600,11 @@
         ${L.tool ? `<div class="row"><a class="btn soft" href="${toolHref(L.tool)}">${ic(L.tool.type === "med" ? "lotus" : L.tool.type === "breath" ? "wind" : "leaf").replace("<svg", '<svg width="18" height="18"')} ${L.tool.label}</a></div>` : ""}
       </section>
       <section class="task">${ic("leaf")}<div class="stack" style="gap:6px"><span class="eyebrow">Mai feladat</span><p>${L.task}</p></div></section>
-      <section class="stack"><span class="eyebrow">Elmélkedés</span><h2>Írd le, ami benned van</h2>
-        <p class="small muted">Nem kell szépen fogalmaznod. A válaszaid automatikusan mentődnek, és a Naplóban is megtalálod őket.</p>
+      <section class="stack"><h2>Elmélkedés</h2>
         ${L.reflect.map((q, i) => `<div><label class="q" for="r-${id}-${i}">${q}</label><textarea id="r-${id}-${i}" data-r="${i}" placeholder="Írj ide…">${esc(refl[i] || "")}</textarea><span class="saved" id="saved-${i}">Mentve</span></div>`).join("")}
       </section>
       <section class="complete-bar">
-        <div class="stack" style="gap:2px"><b>${S.done[id] ? "Ezt a leckét már teljesítetted." : "Elolvastad, kipróbáltad a gyakorlatot?"}</b><span class="small muted">${S.done[id] ? "Bármikor visszatérhetsz hozzá." : "Jelöld késznek, és lépj tovább, amikor készen állsz."}</span></div>
+        <b>${S.done[id] ? "Teljesítve" : "Kész vagy?"}</b>
         <button class="btn ${S.done[id] ? "ghost" : ""}" id="complete">${S.done[id] ? "Visszavonás" : "Lecke teljesítve"}</button>
       </section>
       <nav class="row between">
@@ -623,20 +620,20 @@
   function vPractice() {
     const card = (href, icon, t, d) => `<a class="card linkcard" href="${href}"><span class="icon-tile">${ic(icon)}</span><span class="t">${t}</span><span class="d">${d}</span></a>`;
     return `<div class="col wide">
-      <div class="stack"><span class="eyebrow">Gyakorlás</span><h1>A gyakorlás terme</h1><p class="muted" style="max-width:40rem">A tanítás csak akkor válik a sajátoddá, ha gyakorlod. Itt mindent megtalálsz, a két perces légzéstől a mélyebb meditációig.</p></div>
+      <h1>Gyakorlás</h1>
       <section class="stack"><h2>Légzőgyakorlatok</h2><div class="grid3">
-        ${CK.breathing.map((b) => card("#legzes-" + b.id, "wind", b.name, `<span class="chip" style="margin-bottom:4px">${b.tag}</span><br>${b.desc}`)).join("")}
+        ${CK.breathing.map((b) => card("#legzes-" + b.id, "wind", b.name, b.tag)).join("")}
       </div></section>
       <section class="stack"><h2>Vezetett meditációk</h2><div class="grid3">
-        ${CK.meditations.map((m) => card("#meditacio-" + m.id, m.id === "hegy" ? "mountain" : m.id === "metta" || m.id === "onegyutterzes" ? "heart" : "lotus", m.title, `${Math.round(m.steps.reduce((s, x) => s + x[0], 0) / 60)} perc · ${m.desc}`)).join("")}
+        ${CK.meditations.map((m) => card("#meditacio-" + m.id, m.id === "hegy" ? "mountain" : m.id === "metta" || m.id === "onegyutterzes" ? "heart" : "lotus", m.title, `${Math.round(m.steps.reduce((s, x) => s + x[0], 0) / 60)} perc`)).join("")}
       </div></section>
       <section class="stack"><h2>Eszközök</h2><div class="grid3">
-        ${card("#irigyseg-atalakito", "seed", "Irigység-átalakító", "Öt lépés, amely az irigység szúrását irányjelzővé és jókívánsággá alakítja.")}
-        ${card("#itelet-atalakito", "compass", "Ítélet-átalakító", "Tény vagy történet? Egy gyors útmutató, ha valakiről túl gyorsan ítélkeznél.")}
-        ${card("#ertekek", "compass", "Értékiránytű", "Válaszd ki az 5 legfontosabb értékedet, hogy önállóbban dönthess.")}
-        ${card("#kihivas", "calendar", "21 napos kihívás", "Hét apró napi szokás, hogy a változás beépüljön a hétköznapokba.")}
-        ${card("#idozito", "timer", "Meditációs időzítő", "Csendes ülés tibeti tálhanggal, szabadon választható időtartammal.")}
-        ${card("#kartya", "card", "Bölcsességkártyák", "Húzz egy lapot, és vidd magaddal a mondatot egész nap.")}
+        ${card("#irigyseg-atalakito", "seed", "Irigység-átalakító", "5 lépés")}
+        ${card("#itelet-atalakito", "compass", "Ítélet-átalakító", "5 lépés")}
+        ${card("#ertekek", "compass", "Értékiránytű", "5 fő értéked")}
+        ${card("#kihivas", "calendar", "21 napos kihívás", "Napi szokások")}
+        ${card("#idozito", "timer", "Időzítő", "Csendes ülés")}
+        ${card("#kartya", "card", "Bölcsességkártyák", "Húzz egy lapot")}
       </div></section>
     </div>`;
   }
@@ -698,10 +695,8 @@
         </div>
         <p class="small muted" id="tot"></p>
       </section>
-      <section class="card stack"><h3>Az ütem</h3>
-        <div class="row" style="gap:8px">${b.phases.map((p) => `<span class="chip">${p[2]} · ${p[1]} mp</span>`).join("")}</div>
-        <p class="small muted">Ülj egyenes háttal, lazítsd el a vállad és az állkapcsod. Ha szédülsz vagy kellemetlen, térj vissza a természetes légzéshez. A légzésnek kényelmesnek kell maradnia, ne erőltesd.</p>
-      </section>
+      <div class="row" style="gap:8px">${b.phases.map((p) => `<span class="chip">${p[2]} · ${p[1]} mp</span>`).join("")}</div>
+      <p class="small muted">Ne erőltesd. Ha szédülsz, lélegezz természetesen.</p>
     </div>`;
   }
 
@@ -763,7 +758,6 @@
           ${hasSpeech ? `<label class="toggle"><input type="checkbox" id="spk" ${S.speak ? "checked" : ""}> Felolvasás${huVoice ? "" : " (ha van magyar hang)"}</label>` : ""}
         </div>
       </section>
-      <p class="small muted">Tipp: olvasd a szöveget, majd csukd be a szemed, amíg a következő rész meg nem jelenik. A szöveg magától lép tovább.</p>
     </div>`;
   }
 
@@ -793,12 +787,12 @@
     });
     return `<div class="col">
       <nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>Időzítő</span></nav>
-      <div class="stack"><span class="eyebrow">Csendes ülés</span><h1>Meditációs időzítő</h1><p class="muted">Nincs instrukció, csak te és a csend. A kezdetet és a véget egy tibeti tál hangja jelzi. Figyeld a légzésedet, és ha elkalandozol, szelíden térj vissza.</p></div>
+      <h1>Időzítő</h1>
       <section class="card player">
         <svg class="ring-svg" viewBox="0 0 240 240" aria-hidden="true"><circle cx="120" cy="120" r="108" fill="none" stroke="var(--surface-2)" stroke-width="6"/>
           <circle id="ring" cx="120" cy="120" r="108" fill="none" stroke="var(--jade)" stroke-width="6" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="0" transform="rotate(-90 120 120)" style="transition:stroke-dashoffset 1s linear"/>
           <text x="120" y="132" text-anchor="middle" font-size="40" fill="var(--ink)" font-family="Marcellus, serif" id="tt"></text></svg>
-        <div class="stack" style="align-items:center;gap:8px"><span class="small muted">Időtartam (perc)</span><div class="pills" id="mins">${[3, 5, 10, 15, 20, 30].map((x) => `<button data-v="${x}">${x}</button>`).join("")}</div></div>
+        <div class="stack" style="align-items:center;gap:8px"><span class="small muted">Perc</span><div class="pills" id="mins">${[3, 5, 10, 15, 20, 30].map((x) => `<button data-v="${x}">${x}</button>`).join("")}</div></div>
         <div class="stack" style="align-items:center;gap:8px"><span class="small muted">Köztes harang</span><div class="pills" id="ivl"><button data-v="0">Nincs</button><button data-v="1">Percenként</button><button data-v="5">5 percenként</button></div></div>
         <button class="btn" id="go">${ic("play").replace("<svg", '<svg width="18" height="18"')} Indítás</button>
       </section>
@@ -874,17 +868,16 @@
       const draw = () => {
         $("#vals", v).innerHTML = CK.values.map((x) => `<button type="button" class="${S.values.includes(x) ? "on" : ""}" ${!S.values.includes(x) && S.values.length >= 5 ? "disabled style='opacity:.4'" : ""}>${x}</button>`).join("");
         $("#vc", v).textContent = `${S.values.length} / 5 kiválasztva`;
-        $("#vnotes", v).innerHTML = S.values.length ? S.values.map((x, i) => `<div><label class="q" for="vn-${i}">${i + 1}. ${x}: hogyan jelenik meg ez az életemben, és hol hiányzik?</label><textarea id="vn-${i}" data-v="${esc(x)}" placeholder="Írj ide…">${esc(S.valueNotes[x] || "")}</textarea></div>`).join("") : `<p class="muted small">Válassz ki legalább egy értéket, és itt megjelennek a hozzá tartozó kérdések.</p>`;
+        $("#vnotes", v).innerHTML = S.values.length ? S.values.map((x, i) => `<div><label class="q" for="vn-${i}">${x}: hol van jelen, hol hiányzik?</label><textarea id="vn-${i}" data-v="${esc(x)}" placeholder="Írj ide…">${esc(S.valueNotes[x] || "")}</textarea></div>`).join("") : "";
         $$("#vals button", v).forEach((b) => b.addEventListener("click", () => { const i = S.values.indexOf(b.textContent); if (i >= 0) S.values.splice(i, 1); else if (S.values.length < 5) S.values.push(b.textContent); save(); draw(); }));
         $$("#vnotes textarea", v).forEach((t) => t.addEventListener("input", () => { S.valueNotes[t.dataset.v] = t.value; save(); }));
       };
       draw();
     });
     return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>Értékiránytű</span></nav>
-      <div class="stack"><span class="eyebrow">Szvadharma · a saját utad</span><h1>Értékiránytű</h1><p class="muted">Ha tudod, mi fontos neked, nem kell mások jóváhagyására várnod. Válaszd ki azt az öt értéket, amely nélkül nem te lennél. Ne azt, aminek lennie <em>kellene</em>, hanem azt, ami valóban mozgat.</p></div>
+      <div class="stack"><h1>Értékiránytű</h1><p class="muted">Az az öt, ami valóban mozgat, nem ami „kellene”.</p></div>
       <section class="card stack"><div class="row between"><h3>Válassz ötöt</h3><span class="small muted num" id="vc"></span></div><div class="pills values-grid" id="vals"></div></section>
       <section class="stack" id="vnotes"></section>
-      <section class="task">${ic("compass")}<div class="stack" style="gap:6px"><span class="eyebrow">Használat</span><p>Egy döntés előtt nézd meg az öt értékedet, és kérdezd meg: melyik lehetőség szolgálja a legjobban azt, ami nekem fontos?</p></div></section>
     </div>`;
   }
 
@@ -903,9 +896,9 @@
       });
     });
     return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>Bölcsességkártyák</span></nav>
-      <div class="stack"><span class="eyebrow">${CK.wisdom.length} lap</span><h1>Bölcsességkártyák</h1><p class="muted">Húzz egy lapot. Olvasd el lassan háromszor, és vidd magaddal a napodba. Ha jólesik, írd le a naplóba, mit jelent neked ma.</p></div>
+      <h1>Bölcsességkártyák</h1>
       <div class="deck"><section class="wisdom" id="wcard"><q></q><cite></cite><span class="glyph">禅</span></section></div>
-      <div class="row"><button class="btn" id="draw">Új lap húzása</button><a class="btn ghost" href="#naplo">Napló</a></div></div>`;
+      <div class="row"><button class="btn" id="draw">Új lap</button></div></div>`;
   }
 
   /* =================================================================
@@ -916,9 +909,9 @@
     if (!S.challengeStart) {
       after((v) => $("#cstart", v).addEventListener("click", () => { S.challengeStart = today(); markActive(); save(); route(); }));
       return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>21 napos kihívás</span></nav>
-        <div class="stack"><span class="eyebrow">Szokásépítés</span><h1>21 nap, apró lépésekkel</h1><p class="muted">A jellem a szokásokból épül. A következő három hétben naponta pipáld ki, melyik apró gyakorlatot sikerült megtenned. Nem kell mindet minden nap, elég, ha elindulsz.</p></div>
+        <div class="stack"><h1>21 nap, apró lépésekkel</h1><p class="muted">Naponta pipáld ki, ami sikerült. Nem kell mind.</p></div>
         <section class="card stack">${CK.habits.map((h) => `<div class="row" style="gap:10px"><i class="dot" style="--c:${ac(h.a)}"></i><span>${h.t}</span>${focusAreas.includes(h.a) ? '<span class="chip dev">Neked ajánlott</span>' : ""}</div>`).join("")}</section>
-        <div class="row"><button class="btn" id="cstart">Kihívás indítása ma</button></div></div>`;
+        <div class="row"><button class="btn" id="cstart">Indítás ma</button></div></div>`;
     }
     const [y, mo, d] = S.challengeStart.split("-").map(Number); const start = new Date(y, mo - 1, d);
     const dayN = Math.floor((new Date(new Date().toDateString()) - start) / 864e5) + 1;
@@ -933,14 +926,165 @@
     const totalChecks = dates.reduce((s, dt) => s + Object.values(S.habits[dt] || {}).filter(Boolean).length, 0);
     return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>21 napos kihívás</span></nav>
       <div class="stack"><span class="eyebrow num">${dayN > 21 ? "A kihívás véget ért" : `${dayN}. nap / 21`}</span><h1>${dayN > 21 ? "Végigcsináltad!" : "Mai apró lépések"}</h1>
-      <p class="muted">${dayN > 21 ? `21 nap alatt összesen ${totalChecks} apró jó lépést tettél meg. Kezdhetsz egy újabb kört.` : "Pipáld ki, ami ma sikerült. Holnap új nap."}</p></div>
+      ${dayN > 21 ? `<p class="muted">${totalChecks} apró lépés 21 nap alatt.</p>` : ""}</div>
       ${dayN <= 21 ? `<section class="card stack" style="gap:2px">${CK.habits.map((h) => `<label class="habit"><input type="checkbox" data-h="${h.id}" ${th[h.id] ? "checked" : ""}><span>${h.t}</span>${focusAreas.includes(h.a) ? '<span class="chip dev">Ajánlott</span>' : `<i class="dot" style="--c:${ac(h.a)}"></i>`}</label>`).join("")}</section>` : ""}
       <section class="card stack"><div class="row between"><h3>A 21 nap</h3><span class="small muted num">${totalChecks} pipa összesen</span></div>
         <div class="days">${dates.map((dt, k) => { const c = Object.values(S.habits[dt] || {}).filter(Boolean).length; return `<div class="${c >= 4 ? "full" : c ? "part" : ""} ${dt === td ? "today" : ""}" title="${huDate(dt)}: ${c} szokás">${k + 1}</div>`; }).join("")}</div>
         <div class="row small muted" style="gap:14px"><span class="row" style="gap:6px"><i class="dot" style="--c:var(--jade-soft)"></i>1–3 szokás</span><span class="row" style="gap:6px"><i class="dot" style="--c:var(--jade)"></i>4 vagy több</span></div>
       </section>
       <div class="row"><button class="btn ghost sm" id="crestart">Újrakezdés mától</button></div>
-      <div class="confirm" id="cconfirm" hidden>Biztosan újrakezded? A korábbi pipák megmaradnak, de a 21 nap mától számít. <button class="btn sm" id="cyes">Igen, újrakezdem</button><button class="btn ghost sm" id="cno">Mégse</button></div>
+      <div class="confirm" id="cconfirm" hidden>Újrakezded mától? <button class="btn sm" id="cyes">Igen, újrakezdem</button><button class="btn ghost sm" id="cno">Mégse</button></div>
+    </div>`;
+  }
+
+  /* =================================================================
+     MOZGÁS
+     ================================================================= */
+  function weekDates() {
+    const d = new Date(); const dow = (d.getDay() + 6) % 7;
+    return Array.from({ length: 7 }, (_, k) => dstr(new Date(d.getFullYear(), d.getMonth(), d.getDate() - dow + k)));
+  }
+  const weekWorkouts = () => { const wk = weekDates(); return S.workouts.filter((w) => wk.includes(w.date)); };
+  function logWorkout(type, min, name) {
+    S.workouts.unshift({ id: Date.now(), date: today(), type, min, name: name || "" });
+    if (min >= 20) { S.habits[today()] = S.habits[today()] || {}; S.habits[today()].mozgas = true; }
+    markActive(); save();
+  }
+  const icn = (n, s = 18) => ic(n).replace("<svg", `<svg width="${s}" height="${s}"`);
+
+  function vMove() {
+    const wk = weekDates(), td = today(), ww = weekWorkouts(), goal = S.moveGoal || 3;
+    const days = new Set(ww.map((w) => w.date)); const DN = ["H", "K", "Sze", "Cs", "P", "Szo", "V"];
+    const lvl = S.runLevel || 0; let pick = null;
+    after((v) => {
+      $("#gminus", v).onclick = () => { S.moveGoal = Math.max(1, goal - 1); save(); route(); };
+      $("#gplus", v).onclick = () => { S.moveGoal = Math.min(7, goal + 1); save(); route(); };
+      const q = $("#qlog", v);
+      $$(".typebtn", v).forEach((b) => b.addEventListener("click", () => {
+        pick = b.dataset.t; $$(".typebtn", v).forEach((x) => x.classList.toggle("on", x === b));
+        q.hidden = false; $("#qt", v).textContent = MT[pick].l;
+      }));
+      $$("#qlog [data-m]", v).forEach((b) => b.addEventListener("click", () => {
+        logWorkout(pick, +b.dataset.m, MT[pick].l); bell(330, 0.1, 3); toast(`${MT[pick].l}, ${b.dataset.m} perc – mentve.`); route();
+      }));
+      $$("[data-wdel]", v).forEach((b) => b.addEventListener("click", () => { S.workouts = S.workouts.filter((w) => String(w.id) !== b.dataset.wdel); save(); route(); }));
+    });
+    return `<div class="col">
+      <h1>Mozgás</h1>
+      <section class="card stack move-week">
+        <div class="row between">
+          <div class="stack" style="gap:0"><b class="big-n num">${ww.length}<span> / ${goal}</span></b><span class="small muted">edzés ezen a héten</span></div>
+          <span class="stepper"><button id="gminus" aria-label="Kisebb heti cél">−</button><span>${goal}× hetente</span><button id="gplus" aria-label="Nagyobb heti cél">+</button></span>
+        </div>
+        <div class="week">${wk.map((d, k) => `<div class="${days.has(d) ? "on" : ""} ${d === td ? "today" : ""}"><i>${days.has(d) ? icn("check", 14) : ""}</i><span>${DN[k]}</span></div>`).join("")}</div>
+      </section>
+      <section class="stack"><h2>Mit mozogtál ma?</h2>
+        <div class="types">${CK.moveTypes.map((t) => `<button type="button" class="typebtn" data-t="${t.id}">${icn(t.i, 24)}<span>${t.l}</span></button>`).join("")}</div>
+        <div class="card stack" id="qlog" hidden><span class="small muted"><b id="qt"></b> · hány perc?</span>
+          <div class="pills">${[15, 20, 30, 45, 60, 90].map((m) => `<button type="button" data-m="${m}">${m}</button>`).join("")}</div></div>
+      </section>
+      <section class="stack"><h2>Edzőtermi edzések</h2><div class="grid3">
+        ${CK.workouts.map((w) => `<a class="card linkcard" href="#edzes-${w.id}"><span class="icon-tile">${ic("dumbbell")}</span><span class="t">${w.name}</span><span class="d">${w.ex.length} gyakorlat · ${w.min} perc</span></a>`).join("")}
+      </div></section>
+      <section class="stack"><h2>Futás kezdőknek</h2>
+        <div class="levels">${CK.runPlan.map((r) => `<a class="lvl ${r.id <= lvl ? "done" : ""} ${r.id === lvl + 1 ? "next" : ""}" href="#futas-${r.id}"><b>${r.id <= lvl ? icn("check", 16) : r.id}</b><span>${r.d}</span></a>`).join("")}</div>
+      </section>
+      ${S.workouts.length ? `<section class="stack"><h2>Legutóbbiak</h2><div class="card" style="padding-block:4px">${S.workouts.slice(0, 8).map((w) => `<div class="wrow"><span class="icon-tile sm">${icn((MT[w.type] || MT.gym).i, 18)}</span><div class="stack" style="gap:0;min-width:0"><b>${esc(w.name || (MT[w.type] || {}).l || "")}</b><span class="small muted">${huDate(w.date)} · ${w.min} perc</span></div><button class="x" type="button" data-wdel="${w.id}" aria-label="Törlés">×</button></div>`).join("")}</div></section>` : ""}
+    </div>`;
+  }
+
+  /* ---------- edzőtermi edzés ---------- */
+  function vGym(id) {
+    const W = WO[id]; let t0 = 0, tick = null, rest = null, restLeft = 0;
+    after((v) => {
+      const el = $("#gel", v), rp = $("#rest", v), rl = $("#rl", v);
+      const upd = () => (el.textContent = fmtTime((Date.now() - t0) / 1000));
+      function startRest() {
+        clearInterval(rest); restLeft = 75; rp.hidden = false; rl.textContent = restLeft;
+        rest = setInterval(() => { restLeft--; rl.textContent = restLeft; if (restLeft <= 0) { clearInterval(rest); rp.hidden = true; bell(330, 0.16, 3); } }, 1000);
+      }
+      $$(".sets button", v).forEach((b) => b.addEventListener("click", () => {
+        if (!t0) { t0 = Date.now(); tick = setInterval(upd, 1000); wake(); audio(); }
+        b.classList.toggle("on"); if (b.classList.contains("on")) startRest();
+        const e = b.dataset.e; $("#ex-" + e, v).classList.toggle("ok", $$(`.sets button[data-e="${e}"]`, v).every((x) => x.classList.contains("on")));
+      }));
+      $("#rskip", v).onclick = () => { clearInterval(rest); rp.hidden = true; };
+      $("#gdone", v).onclick = () => {
+        const m = t0 ? Math.max(1, Math.round((Date.now() - t0) / 60000)) : W.min;
+        logWorkout("gym", m, W.name); bell(262, 0.12, 4); toast("Szép munka! Edzés mentve."); location.hash = "#mozgas";
+      };
+      onCleanup(() => { clearInterval(tick); clearInterval(rest); });
+    });
+    return `<div class="col">
+      <nav class="crumbs"><a href="#mozgas">Mozgás</a><span>/</span><span>Edzés</span></nav>
+      <div class="row between"><h1>${W.name}</h1><span class="chip num" id="gel">0:00</span></div>
+      <p class="small muted">${icn("timer", 15)} Bemelegítés: ${W.warm}</p>
+      <section class="card stack" style="gap:0">${W.ex.map(([n, s, r], e) => `<div class="exrow" id="ex-${e}"><div class="stack" style="gap:0"><b>${n}</b><span class="small muted">${s} × ${r}</span></div>
+        <div class="sets">${Array.from({ length: s }, (_, k) => `<button type="button" data-e="${e}" aria-label="${n}, ${k + 1}. sorozat">${k + 1}</button>`).join("")}</div></div>`).join("")}</section>
+      <div class="row"><button class="btn" id="gdone">Edzés kész</button><span class="small muted">Koppints a kész sorozatra, és indul a pihenő.</span></div>
+      <div class="restpill" id="rest" hidden>${icn("timer", 18)} Pihenő <b class="num" id="rl"></b> mp <button type="button" id="rskip">Tovább</button></div>
+    </div>`;
+  }
+
+  /* ---------- futás–séta intervallum ---------- */
+  function vRun(n) {
+    const R = RUN[n]; const [warm, reps, run, walk, cool] = R.p;
+    const segs = [["walk", warm, "Bemelegítő séta"]];
+    for (let i = 0; i < reps; i++) { segs.push(["run", run, `Futás ${reps > 1 ? `${i + 1}/${reps}` : ""}`.trim()]); if (walk && i < reps - 1) segs.push(["walk", walk, "Séta"]); }
+    segs.push(["walk", cool, "Levezető séta"]);
+    const total = segs.reduce((s, x) => s + x[1], 0);
+    let si = 0, left = segs[0][1], elapsed = 0, timer = null, running = false, last = 0;
+    after((v) => {
+      const st = $("#rstage", v), lab = $("#rlab", v), cnt = $("#rcnt", v), bar = $("#rbar", v), tt = $("#rtime", v), go = $("#rgo", v), nx = $("#rnext", v);
+      function show() {
+        const [k, , l] = segs[si]; st.className = "run-stage " + k; lab.textContent = l; cnt.textContent = fmtTime(left);
+        nx.textContent = segs[si + 1] ? `Utána: ${segs[si + 1][2].toLowerCase()}` : "Utolsó szakasz";
+        bar.style.width = (elapsed / total) * 100 + "%"; tt.textContent = `${fmtTime(elapsed)} / ${fmtTime(total)}`;
+      }
+      function cue() {
+        const k = segs[si][0];
+        if (k === "run") { tone("in"); setTimeout(() => tone("in"), 260); } else tone("out");
+        try { navigator.vibrate && navigator.vibrate(k === "run" ? [200, 100, 200] : [400]); } catch (e) {}
+        speak(segs[si][2].replace(/\d+\/\d+/, ""));
+      }
+      function step() {
+        const now = Date.now(); const dt = Math.round((now - last) / 1000); if (dt < 1) return; last += dt * 1000;
+        for (let i = 0; i < dt; i++) {
+          elapsed++; left--;
+          if (left <= 0) { si++; if (si >= segs.length) return finish(); left = segs[si][1]; cue(); }
+        }
+        show();
+      }
+      function finish() {
+        clearInterval(timer); running = false; bell(262, 0.18, 6);
+        logWorkout("run", Math.round(total / 60), `Futás – ${R.name}`);
+        if (+n > (S.runLevel || 0)) { S.runLevel = +n; save(); }
+        lab.textContent = "Kész!"; cnt.innerHTML = icn("check", 44); nx.textContent = `${Math.round(total / 60)} perc mentve`; st.className = "run-stage done";
+        go.innerHTML = icn("play") + " Újra"; si = 0; left = segs[0][1]; elapsed = 0; bar.style.width = "100%";
+      }
+      go.addEventListener("click", () => {
+        if (running) { clearInterval(timer); running = false; go.innerHTML = icn("play") + " Folytatás"; return; }
+        audio(); wake(); running = true; last = Date.now(); go.innerHTML = icn("pause") + " Szünet";
+        if (elapsed === 0) cue();
+        timer = setInterval(step, 250);
+      });
+      $("#rstop", v).addEventListener("click", () => {
+        clearInterval(timer); running = false;
+        if (elapsed >= 300) { logWorkout("run", Math.round(elapsed / 60), `Futás – ${R.name} (rövidítve)`); toast(`${Math.round(elapsed / 60)} perc mentve.`); }
+        location.hash = "#mozgas";
+      });
+      $("#rspk", v).addEventListener("change", (e) => { S.speak = e.target.checked; save(); });
+      show(); onCleanup(() => clearInterval(timer));
+    });
+    return `<div class="col">
+      <nav class="crumbs"><a href="#mozgas">Mozgás</a><span>/</span><span>Futás</span></nav>
+      <div class="stack" style="gap:2px"><h1>${R.name}</h1><span class="muted">${R.d} · ${Math.round(total / 60)} perc</span></div>
+      <section class="card player">
+        <div class="run-stage walk" id="rstage"><b id="rlab"></b><span class="num" id="rcnt"></span><small id="rnext"></small></div>
+        <div style="width:100%;max-width:30rem" class="stack"><div class="bar"><i id="rbar" style="width:0"></i></div><span class="small muted num" id="rtime"></span></div>
+        <div class="row" style="justify-content:center"><button class="btn" id="rgo">${icn("play")} Indítás</button><button class="btn ghost" id="rstop">${icn("stop", 16)} Befejezés</button></div>
+        <label class="toggle"><input type="checkbox" id="rspk" ${S.speak ? "checked" : ""}> Hangos bemondás</label>
+      </section>
     </div>`;
   }
 
@@ -977,24 +1121,24 @@
     const reflections = Object.entries(S.reflect).filter(([, o]) => Object.values(o).some((x) => x && x.trim()));
     const label = (e) => (e.type === "naplo" ? "Napló" : WIZ[e.type].title);
     return `<div class="col">
-      <div class="stack"><span class="eyebrow">${huDate(today())}</span><h1>Napló</h1><p class="muted">Pár perc este elég. Az írás lelassít, és segít meglátni a mintázatokat, amelyek a napok forgatagában rejtve maradnak.</p></div>
+      <div class="stack"><span class="eyebrow">${huDate(today())}</span><h1>Napló</h1></div>
       <section class="card stack">
-        <div><span class="q">Milyen ma a belső időjárásod?</span>
+        <div><span class="q">Belső időjárás</span>
           <div class="moods">${CK.moods.map((m) => `<button type="button" data-v="${m.v}" aria-label="${m.l}">${ic("m" + m.v)}<span>${m.c}</span></button>`).join("")}</div></div>
-        <div><span class="q">Milyen érzések voltak jelen ma?</span><div class="pills" id="emos">${CK.emotions.map((x) => `<button type="button">${x}</button>`).join("")}</div></div>
-        <div><span class="q">Három jó dolog ma, és mi volt benne a te részed</span><div class="stack" style="gap:8px">${[1, 2, 3].map((k) => `<input type="text" id="g${k}" placeholder="${k}.">`).join("")}</div></div>
-        <div><label class="q" for="jt">Gondolatok, felismerések</label><textarea id="jt" placeholder="Mit vettél észre ma magadban? Mi volt nehéz? Mire vagy büszke?"></textarea></div>
-        <div class="row"><button class="btn" id="jsave">Bejegyzés mentése</button></div>
+        <div><span class="q">Érzések</span><div class="pills" id="emos">${CK.emotions.map((x) => `<button type="button">${x}</button>`).join("")}</div></div>
+        <div><span class="q">Három jó dolog ma</span><div class="stack" style="gap:8px">${[1, 2, 3].map((k) => `<input type="text" id="g${k}" placeholder="${k}.">`).join("")}</div></div>
+        <div><label class="q" for="jt">Gondolatok</label><textarea id="jt" placeholder="Mi volt nehéz? Mire vagy büszke?"></textarea></div>
+        <div class="row"><button class="btn" id="jsave">Mentés</button></div>
       </section>
-      <section class="stack"><div class="row between"><h2>Korábbi bejegyzések</h2>${S.journal.length ? '<button class="btn ghost sm" id="copy">Az egész napló másolása</button>' : ""}</div>
+      <section class="stack"><div class="row between"><h2>Korábbi bejegyzések</h2>${S.journal.length ? '<button class="btn ghost sm" id="copy">Másolás</button>' : ""}</div>
         <textarea id="copyta" hidden readonly style="min-height:160px"></textarea>
         ${S.journal.length ? `<div class="card" style="padding-block:4px">${S.journal.map((e) => `<div class="entry">
           <div class="head"><span class="chip ${e.type === "naplo" ? "" : "dev"}">${label(e)}</span><span>${huDate(e.date)}</span>${e.mood ? `<span>· ${CK.moods[e.mood - 1].c}</span>` : ""}<button class="x" type="button">Törlés</button></div>
           <div class="body">${esc(entryText(e))}</div>
           <div class="confirm" hidden>Biztosan törlöd ezt a bejegyzést? <button class="btn sm" data-del="${e.id}">Igen, törlöm</button><button class="btn ghost sm" data-keep>Mégse</button></div>
-        </div>`).join("")}</div>` : `<p class="muted">Még nincs bejegyzésed. Az első lehet ma este pár sor arról, mi történt benned.</p>`}
+        </div>`).join("")}</div>` : `<p class="muted">Még nincs bejegyzés.</p>`}
       </section>
-      ${reflections.length ? `<section class="stack"><h2>Elmélkedéseid a leckékből</h2><div class="card" style="padding-block:4px">${reflections.map(([lid, o]) => `<div class="entry"><div class="head"><span class="chip" style="color:${ac(LESSON[lid].area)}">${AREA[LESSON[lid].area].name}</span><a href="#lecke-${lid}">${LESSON[lid].title}</a></div>
+      ${reflections.length ? `<section class="stack"><h2>Elmélkedések</h2><div class="card" style="padding-block:4px">${reflections.map(([lid, o]) => `<div class="entry"><div class="head"><span class="chip" style="color:${ac(LESSON[lid].area)}">${AREA[LESSON[lid].area].name}</span><a href="#lecke-${lid}">${LESSON[lid].title}</a></div>
         ${Object.entries(o).filter(([, x]) => x && x.trim()).map(([qi, x]) => `<div><p class="small muted">${LESSON[lid].reflect[qi]}</p><p class="body">${esc(x)}</p></div>`).join("")}</div>`).join("")}</div></section>` : ""}
     </div>`;
   }
@@ -1019,8 +1163,8 @@
         box.innerHTML = u
           ? `<p class="small muted">Bejelentkezve: <strong>${esc(u.email)}</strong>${Sync.lastSync ? ` · utolsó szinkron: ${Sync.lastSync.toLocaleTimeString("hu-HU", { hour: "2-digit", minute: "2-digit" })}` : ""}</p>
              <div class="row"><button class="btn ghost sm" id="snow">Szinkronizálás most</button><button class="btn ghost sm" id="sout">Kijelentkezés</button></div>`
-          : `<p class="small muted">Add meg az e-mail-címed, és küldünk egy belépési linket. Minden eszközön ugyanazzal a címmel lépj be, és a haladásod mindenhol ugyanaz lesz.</p>
-             <div class="row"><input type="email" id="semail" placeholder="te@pelda.hu" autocomplete="email" style="max-width:20rem"><button class="btn sm" id="sgo">Belépési link küldése</button></div>`;
+          : `<p class="small muted">Lépj be ugyanazzal az e-mail-címmel minden eszközön.</p>
+             <div class="row"><input type="email" id="semail" placeholder="te@pelda.hu" autocomplete="email" style="max-width:20rem"><button class="btn sm" id="sgo">Belépési link</button></div>`;
         if (u) {
           $("#snow", box).onclick = async () => toast((await Sync.now()) ? "Szinkronizálva." : "A szinkron most nem sikerült.");
           $("#sout", box).onclick = async () => { await Sync.signOut(); toast("Kijelentkeztél. Az adatok ezen az eszközön megmaradnak."); };
@@ -1035,19 +1179,16 @@
       };
       Sync.onChange = draw; draw();
     });
-    return `<div class="col"><div class="stack"><span class="eyebrow">Beállítások</span><h1>Beállítások és adatok</h1></div>
-      <section class="card stack"><div><label class="q" for="nm">Hogyan szólítsunk?</label><input type="text" id="nm" value="${esc(S.name)}" style="max-width:20rem"></div>
-        <label class="toggle"><input type="checkbox" class="mus" ${S.music ? "checked" : ""}> Meditációs háttérzene (az első kattintásra indul)</label>
-        <label class="toggle"><input type="checkbox" id="snd" ${S.sound ? "checked" : ""}> Hangjelzések (tibeti tál, légzésütem)</label>
+    return `<div class="col"><h1>Beállítások</h1>
+      <section class="card stack"><div><label class="q" for="nm">Neved</label><input type="text" id="nm" value="${esc(S.name)}" style="max-width:20rem"></div>
+        <label class="toggle"><input type="checkbox" class="mus" ${S.music ? "checked" : ""}> Háttérzene</label>
+        <label class="toggle"><input type="checkbox" id="snd" ${S.sound ? "checked" : ""}> Hangjelzések</label>
         <div><button class="btn ghost sm" id="testbell">Tálhang kipróbálása</button></div></section>
-      ${Sync.enabled ? `<section class="card stack"><h3>Szinkronizálás több eszközön</h3><div class="stack" id="sync"></div></section>` : ""}
-      <section class="card stack"><h3>Az adataid</h3><p class="small muted">${Sync.enabled
-        ? "Válaszaid, jegyzeteid és haladásod ebben a böngészőben tárolódnak, és ha bejelentkezel, a fiókodhoz is mentjük őket, így más eszközön is folytathatod. A fiókod adatait csak te látod."
-        : "Minden válaszod, jegyzeted és haladásod csak ebben a böngészőben, ezen az eszközön tárolódik. Senki más nem látja. Ha törlöd a böngésző adatait vagy másik eszközt használsz, ezek nem lesznek elérhetők, ezért a fontos naplóbejegyzéseket érdemes időnként kimásolni a Napló oldalon."}</p>
+      ${Sync.enabled ? `<section class="card stack"><h3>Szinkronizálás</h3><div class="stack" id="sync"></div></section>` : ""}
+      <section class="card stack"><h3>Adatok</h3><p class="small muted">${Sync.enabled ? "Ebben a böngészőben és belépve a fiókodban tárolódnak. Csak te látod." : "Csak ebben a böngészőben tárolódnak."}</p>
         <div><button class="btn ghost sm" id="reset">Minden adat törlése</button></div>
-        <div class="confirm" id="rconf" hidden>Ez véglegesen törli a felmérőt, a haladást és a naplót. <button class="btn sm" id="ryes">Igen, törlöm</button><button class="btn ghost sm" id="rno">Mégse</button></div></section>
-      <section class="card stack"><h3>A forrásokról</h3><p class="small muted">A leckékben szereplő idézetek a buddhista páli kánonból (Dhammapada, szutták), Lao-ce Tao Te Kingjéből, Csuang-cétől, Konfuciusz Beszélgetéseiből, a Bhagavad Gítából, Patandzsali Jóga-szútráiból, Sántidévától és a zen hagyományból származnak, saját, szabad magyar fordításban. A pszichológiai háttér (érzelemcímkézés, önegyüttérzés, jóindulatú és rosszindulatú irigység, aktív-építő válasz) a mai kutatásokra támaszkodik.</p>
-        <p class="small muted">A Csendkert önismereti eszköz, nem helyettesíti a pszichológus vagy orvos segítségét.</p></section>
+        <div class="confirm" id="rconf" hidden>Végleg törlöd a haladást és a naplót? <button class="btn sm" id="ryes">Igen, törlöm</button><button class="btn ghost sm" id="rno">Mégse</button></div></section>
+      <details class="card small muted"><summary>A forrásokról</summary><p style="margin-top:10px">Idézetek: páli kánon, Tao Te King, Csuang-ce, Konfuciusz, Bhagavad Gítá, Jóga-szútrák, Sántidéva és a zen hagyomány, szabad magyar fordításban. A Csendkert önismereti eszköz, nem helyettesíti a pszichológus vagy orvos segítségét.</p></details>
     </div>`;
   }
 
