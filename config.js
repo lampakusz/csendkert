@@ -13,6 +13,6 @@ window.CK_SYNC = {
   /* AI (Firebase AI Logic + Gemini). Firebase Console → AI Logic → Gemini Developer API bekapcsolása után: ai: true.
      recaptchaKey: a reCAPTCHA v3 "site key" az App Check-hez (2026. nov. 2-ától kötelező). */
   ai: false,
-  recaptchaKey: "",
+  recaptchaKey: "6LcHU-0tAAAAAIASGja-JQrh_0wzetMFUYlj5sBy",
   aiModels: ["gemini-3.5-flash", "gemini-3.5-flash-lite"]
 };
