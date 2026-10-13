@@ -7,10 +7,12 @@
 
   /* ---------- állapot ---------- */
   const KEY = "csendkert.v1";
-  const DEF = { name: "Laura", answers: {}, testIdx: 0, results: null, plan: [], done: {}, steps: {}, reflect: {}, journal: [], habits: {}, challengeStart: null, values: [], valueNotes: {}, seconds: 0, activity: {}, sound: true, speak: false, music: true, workouts: [], moveGoal: 3, runLevel: 0 };
+  const DEF = { name: "", answers: {}, testIdx: 0, results: null, plan: [], done: {}, steps: {}, reflect: {}, journal: [], habits: {}, challengeStart: null, values: [], valueNotes: {}, seconds: 0, activity: {}, sound: true, speak: false, music: true, workouts: [], moveGoal: 3, runLevel: 0 };
   let S;
-  try { S = Object.assign(JSON.parse(JSON.stringify(DEF)), JSON.parse(localStorage.getItem(KEY) || "{}")); }
-  catch (e) { S = JSON.parse(JSON.stringify(DEF)); }
+  // régi (név nélküli) mentés = Laura első verziója, ott az alapnév még "Laura" volt
+  const loadState = (o) => { const s = Object.assign(JSON.parse(JSON.stringify(DEF)), o || {}); if (o && Object.keys(o).length && o.name === undefined) s.name = "Laura"; return s; };
+  try { S = loadState(JSON.parse(localStorage.getItem(KEY) || "{}")); }
+  catch (e) { S = loadState(); }
   const store = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) {} };
   const save = () => { S._ts = Date.now(); store(); Sync.push(); };
 
@@ -34,7 +36,7 @@
       lastSync = new Date(); onChange(); return true;
     }
     function apply(data) {
-      S = Object.assign(JSON.parse(JSON.stringify(DEF)), data); store();
+      S = loadState(data); store();
       if (!/^#(legzes-|meditacio-|idozito)/.test(location.hash)) route(); // futó gyakorlatot nem szakítunk meg
     }
     async function pull() {
@@ -46,7 +48,8 @@
         const remote = snap.exists ? JSON.parse(snap.data().json || "{}") : null;
         let linked = false; try { linked = localStorage.getItem(LINKED) === user.uid; } catch (e) {}
         if (!remote) { if (!S._ts) S._ts = Date.now(); store(); await push(); }
-        else if (!linked && hasLocal() && (remote._ts || 0) !== (S._ts || 0)) {
+        else if (!linked && !hasLocal()) { apply(remote); lastSync = new Date(); } // új eszköz: a fiók adatai jönnek (beállítás-váltás nem írhatja felül)
+        else if (!linked && (remote._ts || 0) !== (S._ts || 0)) {
           // első belépés olyan eszközön, ahol már van helyi haladás
           if (confirm("Ezen az eszközön is van mentett haladás, és a fiókodban is.\n\nOK: a fiókban lévőt töltöm be (az itteni elvész).\nMégse: az itteni adatokkal felülírom a fiókot.")) { apply(remote); lastSync = new Date(); }
           else { S._ts = Date.now(); store(); await push(); }
@@ -92,7 +95,14 @@
           return {};
         } catch (error) { return { error }; }
       },
-      signOut: async () => { await auth.signOut(); try { localStorage.removeItem(LINKED); } catch (e) {} }
+      // kijelentkezéskor a fiókban minden megmarad, erről az eszközről viszont törlődik (közös eszközön ne lássa a következő)
+      signOut: async () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (user && !(await push())) return false;
+        await auth.signOut();
+        S = loadState(); store(); try { localStorage.removeItem(LINKED); } catch (e) {}
+        route(); return true;
+      }
     };
   })();
 
@@ -354,7 +364,7 @@
     const hero = `
       <section class="hero">
         <div class="stack">
-          <p class="greet">${greet()}, ${esc(S.name)}.</p>
+          <p class="greet">${greet()}${S.name ? ", " + esc(S.name) : ""}.</p>
           <h1>Egy csendes hely,<br>ahol önmagadra figyelhetsz.</h1>
           <p class="lead">Napi pár perc csend, tanítás és mozgás.</p>
         </div>
@@ -389,15 +399,26 @@
             <span class="row small muted" style="gap:8px"><i class="dot"></i>${AREA[L.area].full} · ${L.min} perc</span>
             <h2>${L.title}</h2><p class="muted">${L.lead}</p></div>
             <div class="row"><a class="btn" href="#lecke-${L.id}">Lecke megnyitása</a><a class="btn ghost" href="#utam">Az egész út</a></div>`
-          : `<h2>Gratulálok, ${esc(S.name)}!</h2><p class="muted">Minden leckét teljesítettél. Nézd meg, mi változott.</p><div class="row"><a class="btn" href="#teszt" data-retake>Felmérő újra</a><a class="btn ghost" href="#tananyag">Tananyag böngészése</a></div>`}
+          : `<h2>Gratulálok${S.name ? ", " + esc(S.name) : ""}!</h2><p class="muted">Minden leckét teljesítettél. Nézd meg, mi változott.</p><div class="row"><a class="btn" href="#teszt" data-retake>Felmérő újra</a><a class="btn ghost" href="#tananyag">Tananyag böngészése</a></div>`}
         <div class="row small muted" style="gap:8px">Fókuszterületeid: ${focus.map((id) => `<span class="chip" style="color:${ac(id)}"><i class="dot" style="--c:${ac(id)}"></i>${AREA[id].name}</span>`).join("")}</div>
       </section>`;
     }
     const todayH = S.habits[today()] || {}; const hcount = Object.values(todayH).filter(Boolean).length;
     const wkN = weekWorkouts().length, goal = S.moveGoal || 3;
     const quick = (href, icon, t) => `<a class="card linkcard quick" href="${href}"><span class="icon-tile">${ic(icon)}</span><span class="t">${t}</span></a>`;
-    after((v) => { const rt = $("[data-retake]", v); if (rt) rt.addEventListener("click", () => { S.answers = {}; S.testIdx = 0; save(); }); });
+    after((v) => {
+      const rt = $("[data-retake]", v); if (rt) rt.addEventListener("click", () => { S.answers = {}; S.testIdx = 0; save(); });
+      const wn = $("#wname", v);
+      if (wn) {
+        const go = () => { const n = wn.value.trim(); if (!n) { wn.focus(); return; } S.name = n; save(); route(); };
+        $("#wgo", v).addEventListener("click", go); wn.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
+      }
+    });
+    const welcome = S.name ? "" : `<section class="card stack welcome"><h2>Üdv a Csendkertben!</h2>
+        <div class="row"><input type="text" id="wname" placeholder="Hogy szólíthatunk?" autocomplete="given-name" style="max-width:16rem"><button class="btn" id="wgo">Kezdjük</button></div>
+        ${Sync.enabled && !Sync.user ? `<a class="small" href="#beallitasok">Már van fiókom – belépés</a>` : ""}</section>`;
     return `<div class="col">
+      ${welcome}
       ${hero}
       ${mainCard}
       <a class="card move-home" href="#mozgas">
@@ -505,7 +526,7 @@
     after((v) => { $("#retake", v).addEventListener("click", () => { S.answers = {}; S.testIdx = 0; testStarted = true; save(); location.hash = "#teszt"; }); });
     return `<div class="col wide">
       <div class="stack"><span class="eyebrow">Az utam · felmérés: ${huDate(r.date)}</span>
-        <h1>${esc(S.name)}, ez most a te utad</h1></div>
+        <h1>${S.name ? esc(S.name) + ", ez" : "Ez"} most a te utad</h1></div>
       <section class="card radar-wrap">
         <div>${radar(r)}</div>
         <div class="stack">
@@ -721,7 +742,7 @@
       }
       function finish() {
         clearInterval(timer); running = false; addSeconds(elapsed); save(); bell(196, 0.22, 8);
-        txt.textContent = `Köszönöm, hogy időt szántál magadra, ${S.name}. Maradj még egy pillanatig ebben a csendben.`;
+        txt.textContent = `Köszönöm, hogy időt szántál magadra${S.name ? ", " + S.name : ""}. Maradj még egy pillanatig ebben a csendben.`;
         speak("Köszönöm, hogy időt szántál magadra."); stepL.textContent = "Vége";
         go.innerHTML = ic("play").replace("<svg", '<svg width="18" height="18"') + " Újrakezdés";
         idx = 0; remain = m.steps[0][0]; elapsed = 0; begun = false;
@@ -1148,7 +1169,7 @@
      ================================================================= */
   function vSettings() {
     after((v) => {
-      $("#nm", v).addEventListener("change", (e) => { S.name = e.target.value.trim() || "Laura"; save(); toast("Elmentve."); });
+      $("#nm", v).addEventListener("change", (e) => { S.name = e.target.value.trim(); save(); toast("Elmentve."); });
       $("#snd", v).addEventListener("change", (e) => { S.sound = e.target.checked; save(); });
       $(".mus", v).addEventListener("change", (e) => setMusic(e.target.checked));
       $("#testbell", v).addEventListener("click", () => { const o = S.sound; S.sound = true; bell(); S.sound = o; });
@@ -1167,7 +1188,7 @@
              <div class="row"><input type="email" id="semail" placeholder="te@pelda.hu" autocomplete="email" style="max-width:20rem"><button class="btn sm" id="sgo">Belépési link</button></div>`;
         if (u) {
           $("#snow", box).onclick = async () => toast((await Sync.now()) ? "Szinkronizálva." : "A szinkron most nem sikerült.");
-          $("#sout", box).onclick = async () => { await Sync.signOut(); toast("Kijelentkeztél. Az adatok ezen az eszközön megmaradnak."); };
+          $("#sout", box).onclick = async () => { toast((await Sync.signOut()) ? "Kijelentkeztél. Az adataid a fiókodban vannak." : "Nincs kapcsolat – próbáld újra, hogy semmi ne vesszen el."); };
         } else {
           $("#sgo", box).onclick = async () => {
             const email = $("#semail", box).value.trim();
