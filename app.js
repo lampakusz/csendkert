@@ -349,7 +349,16 @@
           <h1>Egy csendes hely,<br>ahol önmagadra figyelhetsz.</h1>
           <p class="lead">Napi 10–15 perc tanítás, gyakorlat és csend, a keleti bölcsesség és a mai pszichológia segítségével.</p>
         </div>
-        <a class="orb-btn" href="#legzes-koherens" aria-label="Nyugodt légzés indítása"><span>Lélegezz</span></a>
+        <div class="hero-art">
+          <svg viewBox="0 0 260 110" aria-hidden="true">
+            <path d="M0 70 C 30 52 52 30 84 36 C 112 42 124 20 156 18 C 190 16 206 46 232 44 C 246 43 254 38 260 36 V110 H0Z" fill="#A9C0D4" opacity=".55"/>
+            <path d="M0 88 C 40 74 70 62 110 70 C 150 78 170 60 210 64 C 232 66 248 74 260 72 V110 H0Z" fill="#7FA3B8" opacity=".5"/>
+            <path d="M0 102 C 60 94 120 92 180 98 C 220 102 244 100 260 96 V110 H0Z" fill="#5E8799" opacity=".45"/>
+            <g transform="translate(206 66)"><use href="#blossom" x="-11" y="-11" width="22" height="22"/></g>
+            <g transform="translate(40 80) rotate(30)"><use href="#blossom" x="-8" y="-8" width="16" height="16"/></g>
+          </svg>
+          <a class="orb-btn" href="#legzes-koherens" aria-label="Nyugodt légzés indítása"><span>Lélegezz</span></a>
+        </div>
       </section>`;
     let mainCard;
     if (!r) {

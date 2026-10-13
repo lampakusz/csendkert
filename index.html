@@ -317,12 +317,98 @@ input[type=range] { width: 100%; accent-color: var(--jade); }
 .footer-note { font-size: .82rem; color: var(--muted); max-width: 40rem; }
 .fade-in { animation: fadein .45s ease both; }
 @keyframes fadein { from { opacity: .001; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* ---- keleti díszítés: cseresznyeág, ködös hegyek, hulló szirmok, seigaiha ---- */
+.decor { position: fixed; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.decor .sakura { position: absolute; top: -10px; right: -20px; width: min(36vw, 500px); height: auto; opacity: .9; filter: drop-shadow(0 6px 14px rgba(110,91,95,.12)); }
+.decor .mountains { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 36vh; }
+.petal { position: absolute; top: -40px; left: var(--x); width: calc(13px * var(--s)); height: calc(10px * var(--s)); border-radius: 150% 0 150% 0; background: linear-gradient(135deg, #FDE3EA, #F2A7BA); opacity: .75; animation: petal-fall var(--d) linear var(--w) infinite; }
+@keyframes petal-fall {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  25% { transform: translate3d(-6vw, 28vh, 0) rotate(140deg); }
+  50% { transform: translate3d(2vw, 56vh, 0) rotate(260deg); }
+  75% { transform: translate3d(-8vw, 82vh, 0) rotate(400deg); }
+  100% { transform: translate3d(-3vw, 112vh, 0) rotate(540deg); }
+}
+@media (max-width: 860px) { .decor .sakura { width: 48vw; top: 70px; right: -14px; opacity: .45; } .decor .mountains { height: 26vh; } }
+
+/* seigaiha hullámminta */
+.wisdom::after, .rail::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 90px; pointer-events: none; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='40' height='20'><g fill='%23FCFDFD' stroke='%2391B4C3' stroke-width='.9'><circle cx='0' cy='0' r='19'/><circle cx='0' cy='0' r='14'/><circle cx='0' cy='0' r='9'/><circle cx='0' cy='0' r='4'/><circle cx='40' cy='0' r='19'/><circle cx='40' cy='0' r='14'/><circle cx='40' cy='0' r='9'/><circle cx='40' cy='0' r='4'/><circle cx='20' cy='10' r='19'/><circle cx='20' cy='10' r='14'/><circle cx='20' cy='10' r='9'/><circle cx='20' cy='10' r='4'/><circle cx='0' cy='20' r='19'/><circle cx='0' cy='20' r='14'/><circle cx='0' cy='20' r='9'/><circle cx='0' cy='20' r='4'/><circle cx='40' cy='20' r='19'/><circle cx='40' cy='20' r='14'/><circle cx='40' cy='20' r='9'/><circle cx='40' cy='20' r='4'/></g></svg>") repeat-x bottom left / 40px 20px; -webkit-mask-image: linear-gradient(to top, rgba(0,0,0,.55), transparent); mask-image: linear-gradient(to top, rgba(0,0,0,.55), transparent); border-radius: 0 0 var(--r) var(--r); }
+.rail { position: sticky; overflow: hidden; }
+.rail::after { height: 150px; border-radius: 0 0 26px 26px; }
+.rail-foot { position: relative; z-index: 1; }
+.wisdom { background: linear-gradient(135deg, rgba(255,250,246,.82), rgba(253,236,238,.62) 55%, rgba(236,244,250,.6)); }
+.wisdom q, .wisdom cite, .wisdom .eyebrow { position: relative; z-index: 1; }
+.wisdom::before { content: ""; position: absolute; right: 14px; top: 12px; width: 64px; height: 64px; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='%23F3AFC0'><circle cy='-6' r='4.6'/><circle cx='5.7' cy='-1.85' r='4.6'/><circle cx='3.53' cy='4.85' r='4.6'/><circle cx='-3.53' cy='4.85' r='4.6'/><circle cx='-5.7' cy='-1.85' r='4.6'/></g><circle r='2.6' fill='%23D9708C'/></svg>") center / contain no-repeat; opacity: .55; transform: rotate(14deg); }
+
+/* virágmotívum a feliratok előtt */
+.eyebrow::before { content: ""; display: inline-block; width: 13px; height: 13px; margin-right: 7px; vertical-align: -1px; background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='%23F3AFC0'><circle cy='-6' r='4.6'/><circle cx='5.7' cy='-1.85' r='4.6'/><circle cx='3.53' cy='4.85' r='4.6'/><circle cx='-3.53' cy='4.85' r='4.6'/><circle cx='-5.7' cy='-1.85' r='4.6'/></g><circle r='2.6' fill='%23D9708C'/></svg>") center / contain no-repeat; }
+.brand-mark { background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='-12 -12 24 24'><g fill='%23F3AFC0'><circle cy='-6' r='4.6'/><circle cx='5.7' cy='-1.85' r='4.6'/><circle cx='3.53' cy='4.85' r='4.6'/><circle cx='-3.53' cy='4.85' r='4.6'/><circle cx='-5.7' cy='-1.85' r='4.6'/></g><circle r='2.6' fill='%23D9708C'/></svg>") center / 86% no-repeat, radial-gradient(circle at 35% 30%, #fff 0%, #FFF1F3 60%, #FBDDE4 100%); box-shadow: 0 4px 12px -4px rgba(217,112,140,.45), inset 0 0 0 1px rgba(255,255,255,.9); }
+
+/* nyitókép: napkelte a hegyek fölött */
+.hero-art { position: relative; width: 260px; height: 220px; flex: none; }
+.hero-art svg { position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: auto; -webkit-mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(to right, transparent, #000 18%, #000 82%, transparent); }
+.hero-art .orb-btn { position: absolute; left: 50%; top: 6px; transform: translateX(-50%); width: 150px; height: 150px; }
+.orb-btn::before { background: radial-gradient(circle at 36% 30%, #FFFDF9 0%, #FFE9DC 26%, #F9C6B1 58%, #EE9C86 86%, #F3B6A3 100%) !important; box-shadow: inset 0 -10px 28px rgba(214,110,84,.25), 0 26px 60px -20px rgba(226,124,96,.6), 0 0 0 12px rgba(255,255,255,.35) !important; }
+.orb-btn span { color: #7A3826 !important; }
+@media (max-width: 600px) { .hero-art { width: 100%; max-width: 320px; height: 170px; } .hero-art .orb-btn { width: 116px; height: 116px; } }
+
+/* területszínek: tónusos kártyák */
+.lesson-item { background: linear-gradient(160deg, color-mix(in srgb, var(--c, var(--jade)) 11%, rgba(255,255,255,.78)), rgba(255,255,255,.62)); }
+.lesson-item::before { content: ""; display: block; width: 28px; height: 3px; border-radius: 3px; background: var(--c, var(--jade)); opacity: .7; margin-bottom: 4px; }
+.area-glyph { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 16%, #fff), #fff); color: var(--c); }
+.card[style*="--c"] { background: linear-gradient(160deg, color-mix(in srgb, var(--c) 9%, rgba(255,255,255,.78)), rgba(255,255,255,.6)); }
+.icon-tile { background: linear-gradient(150deg, #FDE7EC, #DCEBF1); }
+.steps3 .n { color: #C65B78; background: #FDEEF1; }
+.task { background: linear-gradient(135deg, rgba(253,231,236,.9), rgba(248,231,220,.75)); }
+.task svg, .task .eyebrow { color: #B4506D; }
+.btn:not(.ghost):not(.soft) { background: linear-gradient(135deg, #22404D, #2C6F84); }
+.btn:not(.ghost):not(.soft):hover { background: linear-gradient(135deg, #2A4D5C, #347E95); }
 @media (prefers-reduced-motion: reduce) {
   body::before, .orb-btn::before, .fade-in { animation: none; }
+  .petal { display: none; }
   .linkcard, .bar i, .deck .wisdom { transition: none; }
 }
 </style>
 
+<div class="decor" aria-hidden="true">
+  <svg class="sakura" viewBox="0 0 520 360" fill="none">
+    <g stroke="#6E5B5F" stroke-linecap="round">
+      <path d="M540 26 C 450 36 388 66 326 108 C 274 144 232 160 172 170 C 130 177 98 192 66 218" stroke-width="7"/>
+      <path d="M332 104 C 322 72 302 52 270 40" stroke-width="3.2"/>
+      <path d="M212 158 C 200 188 204 214 222 242" stroke-width="3.2"/>
+      <path d="M430 50 C 418 88 426 120 446 152" stroke-width="3.2"/>
+      <path d="M122 180 C 102 162 82 152 56 152" stroke-width="2.6"/>
+      <path d="M270 128 C 262 150 266 168 280 186" stroke-width="2.2"/>
+    </g>
+    <use href="#blossom" x="246" y="18" width="46" height="46"/>
+    <use href="#blossom" x="300" y="80" width="40" height="40" transform="rotate(20 320 100)"/>
+    <use href="#blossom" x="200" y="226" width="44" height="44" transform="rotate(-15 222 248)"/>
+    <use href="#blossom" x="424" y="138" width="50" height="50"/>
+    <use href="#blossom" x="150" y="150" width="34" height="34" transform="rotate(35 167 167)"/>
+    <use href="#blossom" x="38" y="134" width="40" height="40"/>
+    <use href="#blossom" x="262" y="176" width="32" height="32" transform="rotate(50 278 192)"/>
+    <use href="#blossom" x="372" y="74" width="30" height="30"/>
+    <use href="#blossom" x="60" y="200" width="28" height="28" transform="rotate(-30 74 214)"/>
+    <g fill="#E98DA3"><circle cx="402" cy="68" r="4.5"/><circle cx="196" cy="156" r="4"/><circle cx="106" cy="174" r="3.5"/><circle cx="452" cy="44" r="4"/><circle cx="236" cy="262" r="3.5"/></g>
+  </svg>
+  <svg class="mountains" viewBox="0 0 1440 320" preserveAspectRatio="xMidYMax slice">
+    <defs>
+      <linearGradient id="mist" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#fff" stop-opacity=".55"/></linearGradient>
+    </defs>
+    <path d="M0 230 C 80 200 140 160 220 170 C 300 180 330 120 420 110 C 520 100 560 170 660 175 C 760 180 800 120 900 115 C 1000 110 1060 170 1160 165 C 1260 160 1320 130 1440 150 V320 H0Z" fill="#A9C0D4" opacity=".45"/>
+    <rect y="140" width="1440" height="180" fill="url(#mist)"/>
+    <path d="M0 262 C 120 240 180 202 280 216 C 380 230 420 190 520 196 C 640 202 700 250 820 240 C 940 230 980 190 1100 200 C 1220 210 1300 250 1440 236 V320H0Z" fill="#86A9BD" opacity=".42"/>
+    <rect y="210" width="1440" height="110" fill="url(#mist)"/>
+    <path d="M0 300 C 160 280 260 270 380 285 C 520 300 600 270 760 278 C 900 285 1000 300 1140 290 C 1260 282 1360 270 1440 280 V320H0Z" fill="#6F95A8" opacity=".38"/>
+  </svg>
+  <i class="petal" style="--x:12vw;--d:19s;--w:-2s;--s:1"></i>
+  <i class="petal" style="--x:34vw;--d:24s;--w:-9s;--s:.8"></i>
+  <i class="petal" style="--x:52vw;--d:21s;--w:-4s;--s:1.1"></i>
+  <i class="petal" style="--x:68vw;--d:27s;--w:-15s;--s:.7"></i>
+  <i class="petal" style="--x:80vw;--d:22s;--w:-12s;--s:.9"></i>
+  <i class="petal" style="--x:92vw;--d:25s;--w:-6s;--s:1"></i>
+  <i class="petal" style="--x:44vw;--d:30s;--w:-20s;--s:.75"></i>
+</div>
 <div class="app">
   <aside class="rail" aria-label="Fő navigáció">
     <a class="brand" href="#kezdolap">
@@ -352,6 +438,15 @@ input[type=range] { width: 100%; accent-color: var(--jade); }
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
+    <radialGradient id="petalGrad" cx="0" cy="0" r="22" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#FFF4F6"/><stop offset=".55" stop-color="#F9C9D4"/><stop offset="1" stop-color="#EFA0B3"/></radialGradient>
+    <symbol id="blossom" viewBox="-24 -24 48 48">
+      <g fill="url(#petalGrad)" stroke="#E58FA5" stroke-width=".6">
+        <path id="pt" d="M0 -2 C -7 -6 -10 -16 -4.5 -21.5 L0 -18.5 L4.5 -21.5 C 10 -16 7 -6 0 -2Z"/>
+        <use href="#pt" transform="rotate(72)"/><use href="#pt" transform="rotate(144)"/><use href="#pt" transform="rotate(216)"/><use href="#pt" transform="rotate(288)"/>
+      </g>
+      <circle r="3.4" fill="#E27C95"/>
+      <g fill="#C65B78"><circle cx="0" cy="-6.5" r="1"/><circle cx="6.2" cy="-2" r="1"/><circle cx="3.8" cy="5.3" r="1"/><circle cx="-3.8" cy="5.3" r="1"/><circle cx="-6.2" cy="-2" r="1"/></g>
+    </symbol>
     <g id="enso">
       <path d="M50 10 C 74 9, 91 27, 90 50 C 89 74, 71 91, 49 90 C 26 89, 10 72, 11 49 C 12 33, 21 20, 35 14" fill="none" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
       <path d="M36 15 C 40 13, 44 12, 47 12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity=".55"/>
@@ -362,6 +457,6 @@ input[type=range] { width: 100%; accent-color: var(--jade); }
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="config.js?v=3" charset="utf-8"></script>
-<script src="content.js?v=3" charset="utf-8"></script>
-<script src="app.js?v=3" charset="utf-8"></script>
+<script src="config.js?v=4" charset="utf-8"></script>
+<script src="content.js?v=4" charset="utf-8"></script>
+<script src="app.js?v=4" charset="utf-8"></script>
