@@ -7,7 +7,7 @@
 
   /* ---------- állapot ---------- */
   const KEY = "csendkert.v1";
-  const DEF = { name: "Laura", answers: {}, testIdx: 0, results: null, plan: [], done: {}, steps: {}, reflect: {}, journal: [], habits: {}, challengeStart: null, values: [], valueNotes: {}, seconds: 0, activity: {}, sound: true, speak: false };
+  const DEF = { name: "Laura", answers: {}, testIdx: 0, results: null, plan: [], done: {}, steps: {}, reflect: {}, journal: [], habits: {}, challengeStart: null, values: [], valueNotes: {}, seconds: 0, activity: {}, sound: true, speak: false, music: true };
   let S;
   try { S = Object.assign(JSON.parse(JSON.stringify(DEF)), JSON.parse(localStorage.getItem(KEY) || "{}")); }
   catch (e) { S = JSON.parse(JSON.stringify(DEF)); }
@@ -168,6 +168,7 @@
   let rain = null;
   function setRain(on) {
     $$(".amb").forEach((x) => (x.checked = on));
+    $$(".amb-btn").forEach((x) => x.setAttribute("aria-pressed", on));
     if (!on) { if (rain) { const r = rain; rain = null; r.g.gain.setTargetAtTime(0, r.c.currentTime, 0.4); setTimeout(() => { try { r.src.stop(); } catch (e) {} }, 1500); } return; }
     const c = audio(); if (!c || rain) return;
     const len = c.sampleRate * 6, buf = c.createBuffer(2, len, c.sampleRate);
@@ -188,6 +189,65 @@
     const g = c.createGain(); g.gain.value = 0; g.gain.setTargetAtTime(0.32, c.currentTime, 1.2);
     src.connect(lp); lp.connect(hp); hp.connect(g); g.connect(c.destination); src.start();
     rain = { src, g, c };
+  }
+
+  /* ---------- meditációs háttérzene (generált) ----------
+     Lassan váltakozó D-dúr pentaton akkordfelületek + szórványos csengőhangok, zengetővel. */
+  let music = null;
+  const mhz = (m) => 440 * Math.pow(2, (m - 69) / 12);
+  const CHORDS = [[50, 57, 62, 66, 69], [43, 50, 59, 62, 66], [47, 54, 59, 62, 66], [45, 52, 57, 61, 64]]; // D, Gmaj7, Bm7, A
+  const CHIME = [74, 76, 78, 81, 83, 86, 88];
+  function reverbIR(c, sec = 5) {
+    const len = Math.floor(c.sampleRate * sec), b = c.createBuffer(2, len, c.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = b.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3); }
+    return b;
+  }
+  function startMusic() {
+    const c = audio(); if (!c || music) return;
+    const master = c.createGain(); master.gain.value = 0; master.gain.setTargetAtTime(0.55, c.currentTime, 2.5); master.connect(c.destination);
+    const verb = c.createConvolver(); verb.buffer = reverbIR(c); const wet = c.createGain(); wet.gain.value = 0.7; verb.connect(wet); wet.connect(master);
+    const bus = c.createGain(); bus.connect(master); bus.connect(verb);
+    const lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 900; lp.Q.value = 0.3; lp.connect(bus);
+    const M = { c, master, bus, lp, timers: [], idx: 0 };
+    const pad = () => {
+      const t = c.currentTime + 0.05, dur = 13, notes = CHORDS[M.idx++ % CHORDS.length];
+      notes.forEach((m, i) => {
+        [["sine", 0], ["triangle", 5]].forEach(([type, cents]) => {
+          const o = c.createOscillator(), g = c.createGain();
+          o.type = type; o.frequency.value = mhz(m); o.detune.value = cents + (Math.random() - 0.5) * 4;
+          const peak = (type === "sine" ? 0.032 : 0.012) * (i === 0 ? 1.3 : 1);
+          g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(peak, t + 5); g.gain.setValueAtTime(peak, t + dur - 2); g.gain.linearRampToValueAtTime(0, t + dur + 5);
+          o.connect(g); g.connect(lp); o.start(t); o.stop(t + dur + 5.2);
+        });
+      });
+    };
+    const chime = () => {
+      const t = c.currentTime + 0.05, f = mhz(CHIME[Math.floor(Math.random() * CHIME.length)]);
+      const pan = c.createStereoPanner ? c.createStereoPanner() : null; if (pan) { pan.pan.value = Math.random() * 1.2 - 0.6; pan.connect(bus); }
+      [[1, 0.022], [2.01, 0.006], [3.98, 0.002]].forEach(([r, a]) => {
+        const o = c.createOscillator(), g = c.createGain(); o.type = "sine"; o.frequency.value = f * r;
+        g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(a, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 6 / r);
+        o.connect(g); g.connect(pan || bus); o.start(t); o.stop(t + 6.2);
+      });
+      M.timers.push(setTimeout(chime, 3500 + Math.random() * 7000));
+    };
+    pad(); M.timers.push(setInterval(pad, 12000)); M.timers.push(setTimeout(chime, 4000));
+    music = M;
+  }
+  function stopMusic() {
+    if (!music) return; const M = music; music = null;
+    M.timers.forEach((x) => { clearTimeout(x); clearInterval(x); });
+    M.master.gain.setTargetAtTime(0, M.c.currentTime, 0.8);
+    setTimeout(() => { try { M.master.disconnect(); } catch (e) {} }, 4000);
+  }
+  function setMusic(on, persist = true) {
+    if (persist && S.music !== on) { S.music = on; save(); }
+    musicUI(on);
+    on ? startMusic() : stopMusic();
+  }
+  function musicUI(on) {
+    $$(".mus").forEach((x) => (x.checked = on));
+    $$(".mus-btn").forEach((x) => x.setAttribute("aria-pressed", on));
   }
   let huVoice = null;
   function loadVoice() { try { huVoice = speechSynthesis.getVoices().find((v) => /^hu/i.test(v.lang)) || null; } catch (e) {} }
@@ -289,9 +349,7 @@
           <h1>Egy csendes hely,<br>ahol önmagadra figyelhetsz.</h1>
           <p class="lead">Napi 10–15 perc tanítás, gyakorlat és csend, a keleti bölcsesség és a mai pszichológia segítségével.</p>
         </div>
-        <a class="enso-btn" href="#legzes-koherens" aria-label="Nyugodt légzés indítása">
-          <svg viewBox="0 0 100 100"><use href="#enso"/></svg><span>Lélegezz</span>
-        </a>
+        <a class="orb-btn" href="#legzes-koherens" aria-label="Nyugodt légzés indítása"><span>Lélegezz</span></a>
       </section>`;
     let mainCard;
     if (!r) {
@@ -303,9 +361,9 @@
         <div class="row"><a class="btn" href="#teszt">Felmérő indítása ${ic("arrowR").replace("<svg", '<svg width="18" height="18"')}</a><a class="btn ghost" href="#tananyag">Előbb körülnézek</a></div>
       </section>
       <section class="steps3">
-        <div><span class="n">一</span><b>Felmérő</b><p class="small muted">Őszinte válaszok hat területen: jelenlét, együttörülés, jóindulat, elfogadás, önállóság, magabiztosság.</p></div>
-        <div><span class="n">二</span><b>Személyes út</b><p class="small muted">A gyengébb területeidre összeállított lecke-sorrend, keleti tanításokkal és gyakorlatokkal.</p></div>
-        <div><span class="n">三</span><b>Napi gyakorlás</b><p class="small muted">Légzés, vezetett meditáció, napló és egy 21 napos kihívás, hogy a változás beépüljön.</p></div>
+        <div><span class="n">1</span><b>Felmérő</b><p class="small muted">Őszinte válaszok hat területen: jelenlét, együttörülés, jóindulat, elfogadás, önállóság, magabiztosság.</p></div>
+        <div><span class="n">2</span><b>Személyes út</b><p class="small muted">A gyengébb területeidre összeállított lecke-sorrend, keleti tanításokkal és gyakorlatokkal.</p></div>
+        <div><span class="n">3</span><b>Napi gyakorlás</b><p class="small muted">Légzés, vezetett meditáció, napló és egy 21 napos kihívás, hogy a változás beépüljön.</p></div>
       </section>`;
     } else {
       const focus = r.order.filter((id) => r.areas[id].level === "focus");
@@ -939,6 +997,7 @@
     after((v) => {
       $("#nm", v).addEventListener("change", (e) => { S.name = e.target.value.trim() || "Laura"; save(); toast("Elmentve."); });
       $("#snd", v).addEventListener("change", (e) => { S.sound = e.target.checked; save(); });
+      $(".mus", v).addEventListener("change", (e) => setMusic(e.target.checked));
       $("#testbell", v).addEventListener("click", () => { const o = S.sound; S.sound = true; bell(); S.sound = o; });
       $("#reset", v).addEventListener("click", () => ($("#rconf", v).hidden = false));
       $("#rno", v).addEventListener("click", () => ($("#rconf", v).hidden = true));
@@ -969,6 +1028,7 @@
     });
     return `<div class="col"><div class="stack"><span class="eyebrow">Beállítások</span><h1>Beállítások és adatok</h1></div>
       <section class="card stack"><div><label class="q" for="nm">Hogyan szólítsunk?</label><input type="text" id="nm" value="${esc(S.name)}" style="max-width:20rem"></div>
+        <label class="toggle"><input type="checkbox" class="mus" ${S.music ? "checked" : ""}> Meditációs háttérzene (az első kattintásra indul)</label>
         <label class="toggle"><input type="checkbox" id="snd" ${S.sound ? "checked" : ""}> Hangjelzések (tibeti tál, légzésütem)</label>
         <div><button class="btn ghost sm" id="testbell">Tálhang kipróbálása</button></div></section>
       ${Sync.enabled ? `<section class="card stack"><h3>Szinkronizálás több eszközön</h3><div class="stack" id="sync"></div></section>` : ""}
@@ -984,5 +1044,18 @@
 
   /* ---------- indítás ---------- */
   $$(".amb").forEach((x) => x.addEventListener("change", (e) => setRain(e.target.checked)));
+  $$(".amb-btn").forEach((x) => x.addEventListener("click", () => setRain(!rain)));
+  $$(".mus").forEach((x) => x.addEventListener("change", (e) => setMusic(e.target.checked)));
+  $$(".mus-btn").forEach((x) => x.addEventListener("click", () => setMusic(!music)));
+  // a böngésző csak felhasználói mozdulat után enged hangot: az első kattintásra/billentyűre indul a zene
+  musicUI(!!S.music);
+  if (S.music) {
+    const kick = (e) => {
+      if (e.target.closest && e.target.closest(".mus, .mus-btn")) return; // a kapcsoló maga kezeli
+      ["pointerdown", "keydown", "touchstart"].forEach((t) => removeEventListener(t, kick, true));
+      if (S.music) startMusic();
+    };
+    ["pointerdown", "keydown", "touchstart"].forEach((t) => addEventListener(t, kick, true));
+  }
   route();
 })();
