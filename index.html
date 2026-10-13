@@ -423,7 +423,23 @@ input[type=range] { width: 100%; accent-color: var(--jade); }
 details.card summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 @media (max-width: 560px) { .grid3 { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; } .grid3 .linkcard { padding: 16px; gap: 6px; } .grid3 .linkcard .t { font-size: .95rem; } .grid3 .icon-tile { width: 36px; height: 36px; } }
 @media (max-width: 560px) { .wisdom::before { width: 40px; height: 40px; right: 10px; top: 8px; opacity: .4; } .wisdom q { padding-right: 18px; } }
-@media (prefers-reduced-motion: reduce) {
+/* ---- AI ---- */
+.btn.ai { background: linear-gradient(135deg, #C65B78, #7A63B8) !important; color: #fff; }
+.btn.ai:hover { filter: brightness(1.07); }
+.btn.ai.ghost { background: rgba(255,255,255,.7) !important; color: #8A4566; border-color: rgba(198,91,120,.35); }
+.btn.ai[disabled] { opacity: .7; cursor: progress; }
+.ai-card { background: linear-gradient(140deg, rgba(253,236,241,.8), rgba(240,236,250,.7) 60%, rgba(255,255,255,.6)) !important; }
+.ai-card > summary, details.ai-card summary { cursor: pointer; font-weight: 600; display: flex; align-items: center; gap: 8px; color: #8A4566; list-style: none; }
+.ai-card > summary::-webkit-details-marker { display: none; }
+.ai-out { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 14px 16px 14px 18px; border-radius: 16px; background: rgba(255,255,255,.78); border: 1px solid rgba(198,91,120,.22); line-height: 1.6; font-size: .97rem; }
+.ai-out::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 3px; background: linear-gradient(#C65B78, #7A63B8); }
+.ai-out .q-me { align-self: flex-end; background: var(--jade-soft); padding: 6px 12px; border-radius: 14px 14px 4px 14px; max-width: 85%; font-weight: 500; }
+.wisdom .btn, .wisdom .ai-out, .wisdom .row { position: relative; z-index: 1; }
+.swap { width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(198,91,120,.3); background: rgba(255,255,255,.7); color: #A64F72; display: grid; place-items: center; cursor: pointer; padding: 0; flex: none; }
+.swap.busy { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.insight { display: flex; gap: 12px; align-items: center; background: linear-gradient(120deg, rgba(220,235,241,.85), rgba(255,255,255,.6)) !important; }
+.insight svg { color: #C65B78; flex: none; }@media (prefers-reduced-motion: reduce) {
   body::before, .orb-btn::before, .fade-in { animation: none; }
   .petal { display: none; }
   .linkcard, .bar i, .deck .wisdom { transition: none; }
@@ -517,6 +533,7 @@ details.card summary { cursor: pointer; font-weight: 600; color: var(--ink); }
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
-<script src="config.js?v=6" charset="utf-8"></script>
-<script src="content.js?v=6" charset="utf-8"></script>
-<script src="app.js?v=6" charset="utf-8"></script>
+<script src="config.js?v=7" charset="utf-8"></script>
+<script src="content.js?v=7" charset="utf-8"></script>
+<script src="app.js?v=7" charset="utf-8"></script>
+<script type="module" src="ai.js?v=7"></script>

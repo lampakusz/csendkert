@@ -116,6 +116,7 @@
   const AREA = Object.fromEntries(CK.areas.map((a) => [a.id, a]));
   const LESSON = Object.fromEntries(CK.lessons.map((l) => [l.id, l]));
   const MED = Object.fromEntries(CK.meditations.map((m) => [m.id, m]));
+  if (S.aiMed) MED.ai = S.aiMed; // legutóbbi saját (AI-) meditáció
   const BR = Object.fromEntries(CK.breathing.map((b) => [b.id, b]));
   const WO = Object.fromEntries(CK.workouts.map((w) => [w.id, w]));
   const RUN = Object.fromEntries(CK.runPlan.map((r) => [r.id, r]));
@@ -153,6 +154,7 @@
     dumbbell: '<path d="M6.5 6.5v11M17.5 6.5v11M3.5 9v6M20.5 9v6M6.5 12h11"/>',
     run: '<circle cx="15" cy="4.5" r="1.8"/><path d="M7.5 21l3.2-5.5 3.3 2.5v4"/><path d="M5 11l3.5-3 4.5.8 2.2 3.2 3.3 1"/><path d="M10.7 15.5L13 8.8"/>',
     walk: '<circle cx="13" cy="4.5" r="1.8"/><path d="M9.5 21l2.3-6.2 2.7 2.7V21"/><path d="M8.5 12.5l2.2-4.6 3 1.1 1.6 3.4"/><path d="M11.8 14.8l-1.1-6.9"/>',
+    spark: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/><path d="M19 15l.7 2 2 .7-2 .7-.7 2-.7-2-2-.7 2-.7z"/>',
     m5: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'
   };
   const ic = (n) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${P[n] || ""}</svg>`;
@@ -281,6 +283,36 @@
   function toast(msg) { const t = $("#toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove("show"), 2400); }
   const addSeconds = (s) => { S.seconds = (S.seconds || 0) + s; markActive(); };
 
+  /* ---------- AI (Gemini, Firebase AI Logic – ai.js) ----------
+     Csak gombnyomásra küld; az első használat előtt egyszer engedélyt kér. */
+  const AI_SYS = "Te a Csendkert nevű önismereti és mozgásos app kísérője vagy. Magyarul, tegezve, melegen, őszintén és tömören válaszolsz, a keleti bölcsesség (buddhizmus, taoizmus, zen) és a mai pszichológia szellemében. Nem vagy terapeuta, és nem adsz orvosi tanácsot. Ne használj markdown formázást, címsort, csillagot vagy felsorolásjelet; rövid bekezdésekben írj. Ne ismételd vissza szó szerint, amit a felhasználó írt. Ha önsértés vagy krízis jelét látod, kedvesen javasold a Lelki Elsősegély Telefonszolgálatot (116-123) vagy szakember felkeresését.";
+  const aiOn = () => !!(window.CK_SYNC && window.CK_SYNC.ai) && S.aiOn !== false;
+  async function aiAsk(prompt, { json = false, system = "" } = {}) {
+    if (!S.aiOk) {
+      if (!confirm("Az AI-funkciók a hozzájuk tartozó szöveget a Google Gemini szolgáltatásának küldik feldolgozásra. Csak akkor küld bármit, amikor egy AI-gombot megnyomsz.\n\nRendben?")) throw new Error("cancel");
+      S.aiOk = true; save();
+    }
+    if (!window.CKAI) await new Promise((res, rej) => { const t = setTimeout(() => rej(new Error("not ready")), 8000); addEventListener("ckai-ready", () => { clearTimeout(t); res(); }, { once: true }); });
+    const out = await window.CKAI.generate({ prompt, system: AI_SYS + (system ? "\n" + system : ""), json });
+    if (!json) return out.trim();
+    return JSON.parse(out.replace(/^\s*```(?:json)?/i, "").replace(/```\s*$/, "").trim());
+  }
+  const fmtAI = (t) => esc(t).split(/\n{2,}/).map((p) => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
+  const aiErr = (e) => /quota|429|exhaust|rate/i.test(e.message) ? "Most túl sokan kérdeztek, próbáld pár perc múlva." : /app.?check|403|permission|api.?key|not ready/i.test(e.message) ? "Az AI most nem érhető el (beállítás)." : "Az AI most nem válaszolt. Próbáld újra.";
+  const aiBtn = (id, label, cls = "") => aiOn() ? `<button type="button" class="btn ai sm ${cls}" id="${id}">${ic("spark").replace("<svg", '<svg width="16" height="16"')} ${label}</button>` : "";
+  const aiBox = (id) => `<div class="ai-out" id="${id}" hidden></div>`;
+  // gomb → AI-hívás → szöveg a dobozba; run() szöveget ad vissza (vagy null, ha maga rajzol)
+  function aiWire(btn, box, run) {
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const lbl = btn.innerHTML; btn.disabled = true; btn.innerHTML = `${ic("spark").replace("<svg", '<svg width="16" height="16"')} Gondolkodom…`;
+      try { const txt = await run(); if (txt != null && box) { box.hidden = false; box.innerHTML = fmtAI(txt); } }
+      catch (e) { if (e.message !== "cancel") { console.warn("AI:", e); toast(aiErr(e)); } }
+      finally { btn.disabled = false; btn.innerHTML = lbl; }
+    });
+  }
+  const clip = (s, n = 500) => { s = String(s || "").trim(); return s.length > n ? s.slice(0, n) + "…" : s; };
+
   /* ---------- felmérő kiértékelése ---------- */
   function computeResults() {
     const sum = {}, cnt = {};
@@ -326,7 +358,7 @@
   const ROUTES = {
     kezdolap: vHome, teszt: vTest, utam: vPath, tananyag: vLibrary, gyakorlas: vPractice, naplo: vJournal,
     "irigyseg-atalakito": () => vWizard("irigyseg"), "itelet-atalakito": () => vWizard("itelet"),
-    ertekek: vValues, kartya: vCards, kihivas: vChallenge, idozito: vTimer, beallitasok: vSettings, mozgas: vMove, legzes: () => vBreathList(), meditacio: () => vMedList()
+    ertekek: vValues, kartya: vCards, kihivas: vChallenge, idozito: vTimer, beallitasok: vSettings, mozgas: vMove, "sajat-meditacio": vAIMed, legzes: () => vBreathList(), meditacio: () => vMedList()
   };
   function route() {
     cleanup();
@@ -354,6 +386,19 @@
     const d = new Date(); const start = new Date(d.getFullYear(), 0, 0);
     const doy = Math.floor((d - start) / 864e5);
     return CK.wisdom[(doy + offset) % CK.wisdom.length];
+  }
+  // rövid helyzetkép az AI-nak (csak ami a javaslathoz kell, naplószöveg nélkül)
+  function dayCtx() {
+    const DN = ["vasárnap", "hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat"]; const d = new Date();
+    const lastJ = S.journal.find((e) => e.type === "naplo" && e.mood); const nx = nextLesson(); const w0 = S.workouts[0];
+    return [`Ma ${DN[d.getDay()]} van, ${d.getHours()} óra.`,
+      `Heti mozgás: ${weekWorkouts().length} / ${S.moveGoal || 3} edzés.`,
+      w0 ? `Utolsó edzés: ${w0.name || w0.type}, ${huDate(w0.date)}, ${w0.min} perc.` : "Még nincs naplózott edzés.",
+      `Futóprogram: ${S.runLevel || 0}. szint kész a 6-ból.`,
+      nx ? `Következő lecke: ${LESSON[nx].title}.` : "",
+      lastJ ? `Legutóbbi hangulat (${huDate(lastJ.date)}): ${CK.moods[lastJ.mood - 1].l}${lastJ.emotions && lastJ.emotions.length ? ", érzések: " + lastJ.emotions.join(", ") : ""}.` : "",
+      S.results ? `Fókuszterületek: ${S.results.order.filter((id) => S.results.areas[id].level === "focus").map((id) => AREA[id].full).join(", ")}.` : ""
+    ].filter(Boolean).join(" ");
   }
   function greet() { const h = new Date().getHours(); return h < 10 ? "Jó reggelt" : h < 18 ? "Szép napot" : "Szép estét"; }
 
@@ -405,9 +450,15 @@
     }
     const todayH = S.habits[today()] || {}; const hcount = Object.values(todayH).filter(Boolean).length;
     const wkN = weekWorkouts().length, goal = S.moveGoal || 3;
+    const daily = S.aiDaily && S.aiDaily.date === today() ? S.aiDaily.text : "";
     const quick = (href, icon, t) => `<a class="card linkcard quick" href="${href}"><span class="icon-tile">${ic(icon)}</span><span class="t">${t}</span></a>`;
     after((v) => {
       const rt = $("[data-retake]", v); if (rt) rt.addEventListener("click", () => { S.answers = {}; S.testIdx = 0; save(); });
+      aiWire($("#aidailyb", v), $("#aidaily", v), async () => {
+        const t = await aiAsk(`Javasolj nekem egyetlen konkrét dolgot mára (2-3 mondatban), ami most a legtöbbet adná: lehet mozgás, egy lecke, légzés, meditáció vagy pihenés. Indokold egy mondatban. Adataim: ${dayCtx()}`);
+        S.aiDaily = { date: today(), text: t }; save(); return t;
+      });
+      aiWire($("#aiwisb", v), $("#aiwis", v), () => aiAsk(`A mai bölcsesség: „${w[0]}” (${w[1]}). Magyarázd el 2-3 mondatban egyszerűen, mit jelent, és adj hozzá egy apró gyakorlatot, amit ma kipróbálhatok.`));
       const wn = $("#wname", v);
       if (wn) {
         const go = () => { const n = wn.value.trim(); if (!n) { wn.focus(); return; } S.name = n; save(); route(); };
@@ -432,7 +483,8 @@
         <div><b>${S.workouts.length}</b><span>edzés</span></div>
         <div><b>${days}</b><span>aktív nap</span></div>
       </section>
-      <section class="wisdom"><q>${w[0]}</q><cite>${w[1]}</cite></section>
+      ${aiOn() ? `<section class="card stack ai-card"><div class="row between"><b>Mit csináljak ma?</b>${aiBtn("aidailyb", daily ? "Új javaslat" : "Javaslat")}</div><div class="ai-out" id="aidaily" ${daily ? "" : "hidden"}>${daily ? fmtAI(daily) : ""}</div></section>` : ""}
+      <section class="wisdom"><q>${w[0]}</q><cite>${w[1]}</cite>${aiOn() ? `<div class="row" style="margin-top:12px">${aiBtn("aiwisb", "Mit jelent ez ma?", "ghost")}</div>${aiBox("aiwis")}` : ""}</section>
       <section class="grid4">
         ${quick("#legzes-doboz", "wind", "Légzés")}
         ${quick("#meditacio-felhok", "lotus", "Meditáció")}
@@ -523,7 +575,14 @@
     const strong = sorted.filter((id) => r.areas[id].level === "str");
     const allHigh = focus.every((id) => r.areas[id].strength > 65);
     const nx = nextLesson();
-    after((v) => { $("#retake", v).addEventListener("click", () => { S.answers = {}; S.testIdx = 0; testStarted = true; save(); location.hash = "#teszt"; }); });
+    after((v) => {
+      $("#retake", v).addEventListener("click", () => { S.answers = {}; S.testIdx = 0; testStarted = true; save(); location.hash = "#teszt"; });
+      aiWire($("#aipathb", v), $("#aipath", v), async () => {
+        const sc = sorted.map((id) => `${AREA[id].full}: ${r.areas[id].strength}% (${r.areas[id].level === "focus" ? "fő fókusz" : r.areas[id].level === "dev" ? "fejlesztendő" : "erősség"})`).join("; ");
+        const t = await aiAsk(`Egy önismereti felmérő eredményeim (100% = nagyon erős terület): ${sc}. Írj nekem személyes, bátorító értelmezést legfeljebb 3 rövid bekezdésben: mit mutat ez a kép, hogyan függhetnek össze a területek, és mire építhetek az erősségeimből. Ne diagnosztizálj.`);
+        r.ai = t; save(); return t;
+      });
+    });
     return `<div class="col wide">
       <div class="stack"><span class="eyebrow">Az utam · felmérés: ${huDate(r.date)}</span>
         <h1>${S.name ? esc(S.name) + ", ez" : "Ez"} most a te utad</h1></div>
@@ -533,6 +592,7 @@
           ${sorted.map((id) => `<div class="area-row" style="--c:${ac(id)}"><span class="nm"><i class="dot"></i>${AREA[id].full}</span>${levelChip(r.areas[id].level)}<div class="bar"><i style="width:${r.areas[id].strength}%"></i></div></div>`).join("")}
         </div>
       </section>
+      ${aiOn() ? `<section class="card stack ai-card"><div class="row between"><b>Személyes értelmezés</b>${aiBtn("aipathb", r.ai ? "Újra" : "Kérem")}</div><div class="ai-out" id="aipath" ${r.ai ? "" : "hidden"}>${r.ai ? fmtAI(r.ai) : ""}</div></section>` : ""}
       <section class="grid2">
         <div class="card stack"><span class="eyebrow">Fő fókusz</span>
           ${focus.map((id) => `<div class="stack" style="gap:4px"><h3 style="color:${ac(id)}">${AREA[id].full} <span class="small muted">· ${AREA[id].pali}</span></h3><p class="small">${AREA[id].short}</p></div>`).join("")}
@@ -600,6 +660,27 @@
           const s = $(`#saved-${ta.dataset.r}`, v); s.classList.add("show"); setTimeout(() => s.classList.remove("show"), 1400);
         }, 500); });
       });
+      // AI: mélyítő kérdés az elmélkedéshez
+      $$("[data-deep]", v).forEach((b) => {
+        const i = b.dataset.deep;
+        aiWire(b, $("#deep-" + i, v), () => {
+          const ans = $(`#r-${id}-${i}`, v).value.trim();
+          if (ans.length < 10) { toast("Előbb írj pár sort."); return null; }
+          return aiAsk(`A "${L.title}" leckénél ezt a kérdést kaptam: "${L.reflect[i]}". A válaszom: "${clip(ans, 1200)}". Tegyél fel nekem EGYETLEN mélyítő, nyitott kérdést, ami segít tovább gondolni (előtte legfeljebb egy rövid, együttérző mondat).`);
+        });
+      });
+      // AI: kérdezz a leckéről (rövid beszélgetés, csak memóriában)
+      const chat = [], cbox = $("#lchat", v), cin = $("#lq", v);
+      aiWire($("#lqb", v), null, async () => {
+        const q = cin.value.trim(); if (!q) { cin.focus(); return null; }
+        const ctx = `A lecke címe: ${L.title}. Bevezető: ${L.lead}. Szöveg: ${clip(L.body.join(" "), 2500)} Bölcsesség: "${L.wisdom.t}" (${L.wisdom.s}). Gyakorlat: ${L.practice.title} – ${L.practice.steps.join(" ")}`;
+        const hist = chat.map(([a, b]) => `Kérdés: ${a}\nVálasz: ${b}`).join("\n");
+        const a = await aiAsk(`${ctx}\n\n${hist ? "Eddigi beszélgetés:\n" + hist + "\n\n" : ""}Új kérdésem a leckéről: ${q}\nVálaszolj röviden (legfeljebb 4-5 mondat), a lecke szellemében.`);
+        chat.push([q, a]); cin.value = "";
+        cbox.hidden = false; cbox.innerHTML = chat.map(([x, y]) => `<p class="q-me">${esc(x)}</p>${fmtAI(y)}`).join("");
+        return null;
+      });
+      cin && cin.addEventListener("keydown", (e) => { if (e.key === "Enter") $("#lqb", v).click(); });
       $("#complete", v).addEventListener("click", () => {
         if (S.done[id]) { delete S.done[id]; save(); route(); return; }
         S.done[id] = today(); markActive(); save(); bell(262, 0.12, 4); toast("Lecke teljesítve. Szép munka!");
@@ -622,8 +703,10 @@
       </section>
       <section class="task">${ic("leaf")}<div class="stack" style="gap:6px"><span class="eyebrow">Mai feladat</span><p>${L.task}</p></div></section>
       <section class="stack"><h2>Elmélkedés</h2>
-        ${L.reflect.map((q, i) => `<div><label class="q" for="r-${id}-${i}">${q}</label><textarea id="r-${id}-${i}" data-r="${i}" placeholder="Írj ide…">${esc(refl[i] || "")}</textarea><span class="saved" id="saved-${i}">Mentve</span></div>`).join("")}
+        ${L.reflect.map((q, i) => `<div><label class="q" for="r-${id}-${i}">${q}</label><textarea id="r-${id}-${i}" data-r="${i}" placeholder="Írj ide…">${esc(refl[i] || "")}</textarea><div class="row between"><span class="saved" id="saved-${i}">Mentve</span>${aiOn() ? `<button type="button" class="btn ai sm ghost" data-deep="${i}">${ic("spark").replace("<svg", '<svg width="16" height="16"')} Mélyítő kérdés</button>` : ""}</div>${aiBox("deep-" + i)}</div>`).join("")}
       </section>
+      ${aiOn() ? `<section class="card stack ai-card"><b>Kérdezz a leckéről</b><div class="ai-out" id="lchat" hidden></div>
+        <div class="row" style="flex-wrap:nowrap"><input type="text" id="lq" placeholder="Pl. hogyan alkalmazzam ezt a munkahelyen?"><button type="button" class="btn ai sm" id="lqb">${ic("spark").replace("<svg", '<svg width="16" height="16"')} Kérdezem</button></div></section>` : ""}
       <section class="complete-bar">
         <b>${S.done[id] ? "Teljesítve" : "Kész vagy?"}</b>
         <button class="btn ${S.done[id] ? "ghost" : ""}" id="complete">${S.done[id] ? "Visszavonás" : "Lecke teljesítve"}</button>
@@ -646,6 +729,7 @@
         ${CK.breathing.map((b) => card("#legzes-" + b.id, "wind", b.name, b.tag)).join("")}
       </div></section>
       <section class="stack"><h2>Vezetett meditációk</h2><div class="grid3">
+        ${aiOn() ? card("#sajat-meditacio", "spark", "Saját meditáció", "A mai napodra írva") : ""}
         ${CK.meditations.map((m) => card("#meditacio-" + m.id, m.id === "hegy" ? "mountain" : m.id === "metta" || m.id === "onegyutterzes" ? "heart" : "lotus", m.title, `${Math.round(m.steps.reduce((s, x) => s + x[0], 0) / 60)} perc`)).join("")}
       </div></section>
       <section class="stack"><h2>Eszközök</h2><div class="grid3">
@@ -657,6 +741,30 @@
         ${card("#kartya", "card", "Bölcsességkártyák", "Húzz egy lapot")}
       </div></section>
     </div>`;
+  }
+  /* ---------- saját meditáció (AI írja, a meglévő lejátszó olvassa fel) ---------- */
+  function vAIMed() {
+    let len = 5;
+    after((v) => {
+      $$("#amlen button", v).forEach((b) => { b.classList.toggle("on", +b.dataset.v === len); b.onclick = () => { len = +b.dataset.v; $$("#amlen button", v).forEach((x) => x.classList.toggle("on", x === b)); }; });
+      aiWire($("#amgo", v), null, async () => {
+        const topic = $("#amt", v).value.trim();
+        const n = Math.max(5, Math.round(len * 60 / 40));
+        const j = await aiAsk(`Írj nekem egy ${len} perces vezetett meditációt. ${topic ? `Ami most foglalkoztat: "${clip(topic, 600)}".` : "Általános megnyugvás és jelenlét."} Kb. ${n} részből álljon; minden rész 1-3 rövid, lassú mondat, és a rész hossza másodpercben (15–75 mp, összesen kb. ${len * 60} mp), hogy legyen idő csendben lenni. Kezdődjön ellazulással, és szelíden érjen véget. Válasz JSON: {"cim": "...", "leiras": "egy rövid mondat", "lepesek": [{"mp": 30, "szoveg": "..."}]}`, { json: true });
+        const clean = (s) => String(s || "").replace(/[<>]/g, "").trim();
+        const steps = (j.lepesek || []).map((x) => [Math.min(90, Math.max(15, Math.round(+x.mp || 30))), clean(x.szoveg)]).filter((x) => x[1]);
+        if (steps.length < 3) throw new Error("bad meditation");
+        S.aiMed = { id: "ai", title: clean(j.cim) || "Saját meditáció", area: "jelenlet", desc: clean(j.leiras), steps }; MED.ai = S.aiMed; save();
+        location.hash = "#meditacio-ai"; return null;
+      });
+    });
+    return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>Saját meditáció</span></nav>
+      <h1>Saját meditáció</h1>
+      <section class="card stack">
+        <div><label class="q" for="amt">Mi foglalkoztat most?</label><textarea id="amt" placeholder="Pl. feszült vagyok a holnapi megbeszélés miatt (nem kötelező)"></textarea></div>
+        <div class="stack" style="gap:8px"><span class="small muted">Hossz (perc)</span><div class="pills" id="amlen">${[3, 5, 8, 12].map((x) => `<button type="button" data-v="${x}">${x}</button>`).join("")}</div></div>
+        <div class="row"><button type="button" class="btn ai" id="amgo">${ic("spark").replace("<svg", '<svg width="18" height="18"')} Megírom</button>${S.aiMed ? `<a class="btn ghost" href="#meditacio-ai">Legutóbbi: ${esc(S.aiMed.title)}</a>` : ""}</div>
+      </section></div>`;
   }
   const vBreathList = () => { location.replace("#gyakorlas"); return ""; };
   const vMedList = () => { location.replace("#gyakorlas"); return ""; };
@@ -832,7 +940,7 @@
         { t: "Mi a te következő lépésed?", h: "Nem az a kérdés, mi vehető el tőle. Az a kérdés, mit tehetsz te magadért. Elég egy kis lépés ezen a héten.", f: [{ k: "lepes", ty: "ta", ph: "Pl. Megkérem a vezetőmet egy rövid visszajelzésre a saját munkámról." }] },
         { t: "Muditá-kívánság", h: "Fogalmazz meg egy jókívánságot neki. Nem kell, hogy már teljesen így érezd. Mondd el magadban lassan háromszor, mindegyiket egy-egy lélegzettel.", f: [{ k: "kivansag", ty: "ta", def: "Örülök, hogy ez neked sikerült. Az örömöd nem vesz el tőlem semmit. Bárcsak megmaradna a boldogságod." }, { k: "utana", ty: "range", l: "És most milyen erős az irigység?" }] }
       ],
-      sum: [["mi", "Mi történt"], ["ero", "Erősség előtte"], ["test", "Testi érzés"], ["vagy", "Amire vágyom"], ["vagyText", "Amit adna"], ["lepes", "Következő lépésem"], ["kivansag", "Jókívánságom"], ["utana", "Erősség utána"]] },
+      sum: [["mi", "Mi történt"], ["ero", "Erősség előtte"], ["test", "Testi érzés"], ["vagy", "Amire vágyom"], ["vagyText", "Amit adna"], ["lepes", "Következő lépésem"], ["kivansag", "Jókívánságom"], ["utana", "Erősség utána"], ["ai", "AI-visszajelzés"]] },
     itelet: { title: "Ítélet-átalakító", eyebrow: "Upekkhá-gyakorlat", intro: "Ha valakiről gyorsan és keményen ítélkezel, ez az öt lépés segít különválasztani a tényt a történettől, és kíváncsisággal nézni rá.", type: "itelet",
       steps: [
         { t: "Mi a gondolatod?", h: "Kiről ítélkezel, és mit gondolsz róla? Írd le úgy, ahogy a fejedben szól.", f: [{ k: "gondolat", ty: "ta", ph: "Pl. Gábor nagyképű, mindig mindent jobban tud." }] },
@@ -841,18 +949,24 @@
         { t: "Csakúgy, mint én", h: "Miben hasonlít rád? Milyen szükséglete vagy félelme lehet, ami neked is ismerős?", f: [{ k: "hasonlo", ty: "ta", ph: "Pl. Ő is szeretné, ha elismernék. Én is szoktam túl sokat beszélni, amikor ideges vagyok." }] },
         { t: "Mit választasz?", h: "Mit szeretnél ezután tenni vagy elengedni? Az elfogadás nem jelenti azt, hogy mindennel egyetértesz.", f: [{ k: "valasz", ty: "pills", o: ["Elengedem", "Beszélek vele", "Határt húzok", "Kíváncsi leszek", "Jót kívánok neki"] }, { k: "valaszText", ty: "ta", l: "Konkrétan:", ph: "Pl. Legközelebb nyugodtan jelzem, hogy szeretném befejezni a gondolatomat." }] }
       ],
-      sum: [["gondolat", "Az eredeti ítélet"], ["teny", "A tény"], ["magyarazat", "Más magyarázatok"], ["hasonlo", "Csakúgy, mint én"], ["valasz", "Amit választok"], ["valaszText", "Konkrétan"]] }
+      sum: [["gondolat", "Az eredeti ítélet"], ["teny", "A tény"], ["magyarazat", "Más magyarázatok"], ["hasonlo", "Csakúgy, mint én"], ["valasz", "Amit választok"], ["valaszText", "Konkrétan"], ["ai", "AI-visszajelzés"]] }
   };
   function vWizard(kind) {
     const W = WIZ[kind]; let step = 0; const data = {};
+    const wizAnswers = () => W.sum.filter(([k]) => k !== "ai" && (Array.isArray(data[k]) ? data[k].length : String(data[k] ?? "").trim())).map(([k, l]) => `${l}: ${Array.isArray(data[k]) ? data[k].join(", ") : clip(data[k], 600)}`).join("; ");
     W.steps.forEach((s) => s.f.forEach((f) => { data[f.k] = f.ty === "pills" ? [] : f.ty === "range" ? 5 : f.def || ""; }));
     function draw() {
       const v = $("#wiz");
       if (step >= W.steps.length) {
         v.innerHTML = `<section class="card stack summary"><span class="eyebrow">Összegzés</span><h2>Ezt fedezted fel</h2><dl>
-          ${W.sum.filter(([k]) => (Array.isArray(data[k]) ? data[k].length : String(data[k]).trim())).map(([k, l]) => `<div><dt>${l}</dt><dd>${esc(Array.isArray(data[k]) ? data[k].join(", ") : k === "ero" || k === "utana" ? data[k] + " / 10" : data[k])}</dd></div>`).join("")}
+          ${W.sum.filter(([k]) => k !== "ai" && (Array.isArray(data[k]) ? data[k].length : String(data[k] ?? "").trim())).map(([k, l]) => `<div><dt>${l}</dt><dd>${esc(Array.isArray(data[k]) ? data[k].join(", ") : k === "ero" || k === "utana" ? data[k] + " / 10" : data[k])}</dd></div>`).join("")}
           </dl>${kind === "irigyseg" && data.ero > data.utana ? `<p class="small" style="color:var(--jade)">Az érzés ereje ${data.ero}-ről ${data.utana}-re csökkent.</p>` : ""}
+          ${aiOn() ? `<div class="row">${aiBtn("wfb", data.ai ? "Új visszajelzés" : "Kérek visszajelzést", "ghost")}</div>` : ""}<div class="ai-out" id="wfbo" ${data.ai ? "" : "hidden"}>${data.ai ? fmtAI(data.ai) : ""}</div>
           <div class="row"><button class="btn" id="wsave">Mentés a naplóba</button><button class="btn ghost" id="wback">Vissza</button></div></section>`;
+        aiWire($("#wfb"), $("#wfbo"), async () => {
+          const t = await aiAsk(`Az app "${W.title}" gyakorlatát csináltam végig. A válaszaim: ${wizAnswers()}. Adj rövid (legfeljebb 3 bekezdés), együttérző visszajelzést: tükrözd, mit látsz, emeld ki, ami jó irányba mutat, és adj egy új szempontot vagy egy apró következő lépést.`);
+          data.ai = t; return t;
+        });
         $("#wsave").onclick = () => { S.journal.unshift({ id: Date.now(), date: today(), type: W.type, data: JSON.parse(JSON.stringify(data)) }); markActive(); save(); toast("Elmentve a naplóba."); location.hash = "#naplo"; };
         $("#wback").onclick = () => { step--; draw(); };
         $("#wsteps").innerHTML = W.steps.map(() => '<i class="on"></i>').join("");
@@ -867,12 +981,14 @@
           if (f.ty === "range") return `<div><label class="q" for="${id}">${f.l} <b class="num" id="${id}-v">${data[f.k]}</b> / 10</label><input type="range" id="${id}" min="1" max="10" value="${data[f.k]}" data-k="${f.k}"></div>`;
           return `<div class="pills" data-k="${f.k}">${f.o.map((o) => `<button type="button" class="${data[f.k].includes(o) ? "on" : ""}">${o}</button>`).join("")}</div>`;
         }).join("")}
+        ${aiOn() ? `<div>${aiBtn("whelp", "Elakadtam, adj ötletet", "ghost")}</div>${aiBox("whelpo")}` : ""}
         <div class="row between"><button class="btn ghost" id="wprev" ${step === 0 ? "disabled" : ""}>Vissza</button><button class="btn" id="wnext">${step === W.steps.length - 1 ? "Összegzés" : "Tovább"}</button></div></section>`;
       $$("textarea", v).forEach((t) => t.addEventListener("input", () => (data[t.dataset.k] = t.value)));
       $$("input[type=range]", v).forEach((r) => r.addEventListener("input", () => { data[r.dataset.k] = +r.value; $("#" + r.id + "-v").textContent = r.value; }));
       $$(".pills", v).forEach((p) => $$("button", p).forEach((b) => b.addEventListener("click", () => { const a = data[p.dataset.k]; const i = a.indexOf(b.textContent); if (i >= 0) a.splice(i, 1); else a.push(b.textContent); b.classList.toggle("on"); })));
       $("#wprev").onclick = () => { step--; draw(); };
       $("#wnext").onclick = () => { step++; draw(); window.scrollTo({ top: 0, behavior: "smooth" }); };
+      aiWire($("#whelp"), $("#whelpo"), () => aiAsk(`Az app "${W.title}" gyakorlatának ${step + 1}. lépésénél tartok: "${s.t}" – ${s.h}. Eddigi válaszaim: ${wizAnswers() || "még nincs"}. Adj 2-3 rövid ötletet vagy segítő kérdést, ami segít megválaszolni ezt a lépést. Ne válaszold meg helyettem, és ne ítélkezz.`));
       const first = $("textarea", v); if (first && step > 0) first.focus();
     }
     after(() => draw());
@@ -894,11 +1010,18 @@
         $$("#vnotes textarea", v).forEach((t) => t.addEventListener("input", () => { S.valueNotes[t.dataset.v] = t.value; save(); }));
       };
       draw();
+      aiWire($("#vdecb", v), $("#vdeco", v), () => {
+        const d = $("#vdec", v).value.trim();
+        if (!d) { $("#vdec", v).focus(); return null; }
+        if (!S.values.length) { toast("Előbb válassz ki értékeket."); return null; }
+        return aiAsk(`Ez a döntés áll előttem: "${clip(d, 800)}". Az öt legfontosabb értékem: ${S.values.map((x) => `${x}${S.valueNotes[x] ? " (" + clip(S.valueNotes[x], 150) + ")" : ""}`).join(", ")}. Segíts végiggondolni: melyik lehetőség melyik értékemet szolgálja vagy sérti, és tegyél fel 1-2 tisztázó kérdést. Ne dönts helyettem. Legfeljebb 4 rövid bekezdés.`);
+      });
     });
     return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>Értékiránytű</span></nav>
       <div class="stack"><h1>Értékiránytű</h1><p class="muted">Az az öt, ami valóban mozgat, nem ami „kellene”.</p></div>
       <section class="card stack"><div class="row between"><h3>Válassz ötöt</h3><span class="small muted num" id="vc"></span></div><div class="pills values-grid" id="vals"></div></section>
       <section class="stack" id="vnotes"></section>
+      ${aiOn() ? `<section class="card stack ai-card"><b>Döntéssegéd</b><textarea id="vdec" placeholder="Milyen döntés előtt állsz? Pl. elvállaljam-e az új projektet?"></textarea><div>${aiBtn("vdecb", "Gondoljuk végig")}</div>${aiBox("vdeco")}</section>` : ""}
     </div>`;
   }
 
@@ -913,13 +1036,17 @@
       put();
       $("#draw", v).addEventListener("click", () => {
         card.classList.add("flip");
-        setTimeout(() => { let j; do { j = Math.floor(Math.random() * CK.wisdom.length); } while (j === i); i = j; put(); card.classList.remove("flip"); }, 380);
+        setTimeout(() => { let j; do { j = Math.floor(Math.random() * CK.wisdom.length); } while (j === i); i = j; put(); card.classList.remove("flip"); const o = $("#cmo", v); if (o) o.hidden = true; }, 380);
+      });
+      aiWire($("#cmb", v), $("#cmo", v), () => {
+        const lastJ = S.journal.find((e) => e.type === "naplo" && e.date === today());
+        return aiAsk(`Ezt a bölcsességkártyát húztam: „${CK.wisdom[i][0]}” (${CK.wisdom[i][1]}). ${lastJ && lastJ.mood ? `A mai hangulatom: ${CK.moods[lastJ.mood - 1].l}.` : ""} Mit jelenthet ez nekem ma? 2-3 mondat magyarázat és egy apró, ma kipróbálható lépés.`);
       });
     });
     return `<div class="col"><nav class="crumbs"><a href="#gyakorlas">Gyakorlás</a><span>/</span><span>Bölcsességkártyák</span></nav>
       <h1>Bölcsességkártyák</h1>
       <div class="deck"><section class="wisdom" id="wcard"><q></q><cite></cite><span class="glyph">禅</span></section></div>
-      <div class="row"><button class="btn" id="draw">Új lap</button></div></div>`;
+      <div class="row"><button class="btn" id="draw">Új lap</button>${aiBtn("cmb", "Mit jelent ez ma nekem?", "ghost")}</div>${aiBox("cmo")}</div>`;
   }
 
   /* =================================================================
@@ -971,12 +1098,22 @@
     if (min >= 20) { S.habits[today()] = S.habits[today()] || {}; S.habits[today()].mozgas = true; }
     markActive(); save();
   }
+  // AI nélkül, helyben: jobb-e a hangulat az edzésnapokon?
+  function moodMoveInsight() {
+    const moods = {}; S.journal.forEach((e) => { if (e.type === "naplo" && e.mood) (moods[e.date] = moods[e.date] || []).push(e.mood); });
+    const wd = new Set(S.workouts.map((w) => w.date)); const yes = [], no = [];
+    Object.entries(moods).forEach(([d, ms]) => (wd.has(d) ? yes : no).push(ms.reduce((a, b) => a + b, 0) / ms.length));
+    if (yes.length < 3 || no.length < 3) return "";
+    const avg = (x) => x.reduce((a, b) => a + b, 0) / x.length; const diff = avg(yes) - avg(no);
+    return diff >= 0.3 ? `Azokon a napokon, amikor mozogtál, átlagosan ${diff.toFixed(1).replace(".", ",")} ponttal jobb volt a hangulatod (5-ös skálán).` : "";
+  }
   const icn = (n, s = 18) => ic(n).replace("<svg", `<svg width="${s}" height="${s}"`);
 
   function vMove() {
     const wk = weekDates(), td = today(), ww = weekWorkouts(), goal = S.moveGoal || 3;
     const days = new Set(ww.map((w) => w.date)); const DN = ["H", "K", "Sze", "Cs", "P", "Szo", "V"];
     const lvl = S.runLevel || 0; let pick = null;
+    const insight = moodMoveInsight(); const plan = S.aiPlan && S.aiPlan.week === wk[0] ? S.aiPlan.text : "";
     after((v) => {
       $("#gminus", v).onclick = () => { S.moveGoal = Math.max(1, goal - 1); save(); route(); };
       $("#gplus", v).onclick = () => { S.moveGoal = Math.min(7, goal + 1); save(); route(); };
@@ -989,6 +1126,11 @@
         logWorkout(pick, +b.dataset.m, MT[pick].l); bell(330, 0.1, 3); toast(`${MT[pick].l}, ${b.dataset.m} perc – mentve.`); route();
       }));
       $$("[data-wdel]", v).forEach((b) => b.addEventListener("click", () => { S.workouts = S.workouts.filter((w) => String(w.id) !== b.dataset.wdel); save(); route(); }));
+      aiWire($("#mplanb", v), $("#mplan", v), async () => {
+        const DNL = ["hétfő", "kedd", "szerda", "csütörtök", "péntek", "szombat", "vasárnap"];
+        const t = await aiAsk(`Készíts nekem rövid mozgástervet a hét hátralévő napjaira (ma ${DNL[(new Date().getDay() + 6) % 7]} van). Heti célom ${goal} edzés, eddig ezen a héten: ${ww.length ? ww.map((w) => `${DNL[(new Date(w.date).getDay() + 6) % 7]}: ${w.name || w.type} ${w.min} perc`).join(", ") : "még semmi"}. Elérhető edzéseim az appban: ${CK.workouts.map((w) => w.name).join(", ")}; futóprogram ${lvl}/6 szint kész (következő: ${CK.runPlan[Math.min(lvl, 5)].d}). Inkább edzőterembe járok, néha futok. ${dayCtx()} Napokra bontva, naponta egy sor (pl. "Szerda: Láb és core, 40 perc"), a pihenőnapokat is jelöld; a végén egy mondat biztatás.`);
+        S.aiPlan = { week: wk[0], text: t }; save(); return t;
+      });
     });
     return `<div class="col">
       <h1>Mozgás</h1>
@@ -999,6 +1141,8 @@
         </div>
         <div class="week">${wk.map((d, k) => `<div class="${days.has(d) ? "on" : ""} ${d === td ? "today" : ""}"><i>${days.has(d) ? icn("check", 14) : ""}</i><span>${DN[k]}</span></div>`).join("")}</div>
       </section>
+      ${insight ? `<section class="card insight">${icn("heart", 22)}<p>${insight}</p></section>` : ""}
+      ${aiOn() ? `<section class="card stack ai-card"><div class="row between"><b>Heti terv</b>${aiBtn("mplanb", plan ? "Új terv" : "Tervezd meg")}</div><div class="ai-out" id="mplan" ${plan ? "" : "hidden"}>${plan ? fmtAI(plan) : ""}</div></section>` : ""}
       <section class="stack"><h2>Mit mozogtál ma?</h2>
         <div class="types">${CK.moveTypes.map((t) => `<button type="button" class="typebtn" data-t="${t.id}">${icn(t.i, 24)}<span>${t.l}</span></button>`).join("")}</div>
         <div class="card stack" id="qlog" hidden><span class="small muted"><b id="qt"></b> · hány perc?</span>
@@ -1016,37 +1160,67 @@
 
   /* ---------- edzőtermi edzés ---------- */
   function vGym(id) {
-    const W = WO[id]; let t0 = 0, tick = null, rest = null, restLeft = 0;
+    const W = WO[id]; let ex = W.ex.map((x) => x.slice()), note = "", adjusted = false;
+    let t0 = 0, tick = null, rest = null, restLeft = 0, mins = 30, energy = "Rendben";
+    const sp = (s) => ic("spark").replace("<svg", `<svg width="${s}" height="${s}"`);
+    const row = ([n, s, r], e) => `<div class="exrow" id="ex-${e}"><div class="stack" style="gap:0;min-width:0"><b>${esc(n)}</b><span class="small muted">${s} × ${esc(r)}</span></div>
+      <div class="row" style="gap:8px;flex-wrap:nowrap">${aiOn() ? `<button type="button" class="swap" data-swap="${e}" title="Foglalt a gép? Csere" aria-label="${esc(n)} cseréje">${sp(16)}</button>` : ""}
+      <div class="sets">${Array.from({ length: s }, (_, k) => `<button type="button" data-e="${e}" aria-label="${esc(n)}, ${k + 1}. sorozat">${k + 1}</button>`).join("")}</div></div></div>`;
     after((v) => {
-      const el = $("#gel", v), rp = $("#rest", v), rl = $("#rl", v);
+      const el = $("#gel", v), rp = $("#rest", v), rl = $("#rl", v), list = $("#exlist", v), gn = $("#gnote", v);
       const upd = () => (el.textContent = fmtTime((Date.now() - t0) / 1000));
+      const draw = () => { list.innerHTML = ex.map(row).join(""); gn.hidden = !note; gn.innerHTML = note ? fmtAI(note) : ""; };
       function startRest() {
         clearInterval(rest); restLeft = 75; rp.hidden = false; rl.textContent = restLeft;
         rest = setInterval(() => { restLeft--; rl.textContent = restLeft; if (restLeft <= 0) { clearInterval(rest); rp.hidden = true; bell(330, 0.16, 3); } }, 1000);
       }
-      $$(".sets button", v).forEach((b) => b.addEventListener("click", () => {
-        if (!t0) { t0 = Date.now(); tick = setInterval(upd, 1000); wake(); audio(); }
-        b.classList.toggle("on"); if (b.classList.contains("on")) startRest();
-        const e = b.dataset.e; $("#ex-" + e, v).classList.toggle("ok", $$(`.sets button[data-e="${e}"]`, v).every((x) => x.classList.contains("on")));
-      }));
+      list.addEventListener("click", async (ev) => {
+        const b = ev.target.closest(".sets button");
+        if (b) {
+          if (!t0) { t0 = Date.now(); tick = setInterval(upd, 1000); wake(); audio(); }
+          b.classList.toggle("on"); if (b.classList.contains("on")) startRest();
+          const e = b.dataset.e; $("#ex-" + e, v).classList.toggle("ok", $$(`.sets button[data-e="${e}"]`, v).every((x) => x.classList.contains("on")));
+          return;
+        }
+        const sw = ev.target.closest("[data-swap]"); if (!sw) return;
+        const e = +sw.dataset.swap; sw.disabled = true; sw.classList.add("busy");
+        try {
+          const j = await aiAsk(`Edzőteremben vagyok, ezt az edzést csinálom: "${W.name}" (${ex.map((x) => x[0]).join(", ")}). Ezt a gyakorlatot most nem tudom megcsinálni: "${ex[e][0]}" (${ex[e][1]} × ${ex[e][2]}), például foglalt a gép. Javasolj egy helyettesítő gyakorlatot ugyanarra az izomcsoportra, kezdő–középhaladó szinten, amit egy átlagos edzőteremben meg lehet csinálni. JSON: {"nev": "...", "ism": "10", "miert": "egy rövid mondat"}`, { json: true });
+          if (j.nev) { ex[e] = [String(j.nev).trim(), ex[e][1], String(j.ism || ex[e][2]).trim()]; adjusted = true; const old = $("#ex-" + e, v); old.outerHTML = row(ex[e], e); toast(String(j.miert || "Lecserélve.").slice(0, 140)); }
+        } catch (er) { if (er.message !== "cancel") { console.warn("AI:", er); toast(aiErr(er)); } sw.disabled = false; sw.classList.remove("busy"); }
+      });
+      const pill = (sel, get, set) => $$(sel + " button", v).forEach((b) => { b.classList.toggle("on", b.textContent === String(get())); b.onclick = () => { set(b.textContent); $$(sel + " button", v).forEach((x) => x.classList.toggle("on", x === b)); }; });
+      pill("#gmin", () => mins, (x) => (mins = +x)); pill("#gen", () => energy, (x) => (energy = x));
+      aiWire($("#gadj", v), null, async () => {
+        const j = await aiAsk(`Igazítsd a mai napomhoz ezt az edzőtermi edzést: "${W.name}" – ${ex.map(([n, s, r]) => `${n} ${s}×${r}`).join("; ")}. Ma ${mins} percem van, az energiám: ${energy}. ${dayCtx()} Kezdő–középhaladó szint, átlagos edzőterem. 3–6 gyakorlat, a bemelegítést ne számold bele. JSON: {"gyakorlatok": [{"nev": "...", "sorozat": 3, "ism": "10"}], "megjegyzes": "1-2 mondat, miért így"}`, { json: true });
+        const nx = (j.gyakorlatok || []).map((x) => [String(x.nev || "").trim(), Math.min(5, Math.max(1, Math.round(+x.sorozat || 3))), String(x.ism || "10").trim()]).filter((x) => x[0]);
+        if (nx.length < 2) throw new Error("bad workout");
+        ex = nx; note = String(j.megjegyzes || ""); adjusted = true; draw(); $("#gadjcard", v).open = false; return null;
+      });
       $("#rskip", v).onclick = () => { clearInterval(rest); rp.hidden = true; };
       $("#gdone", v).onclick = () => {
         const m = t0 ? Math.max(1, Math.round((Date.now() - t0) / 60000)) : W.min;
-        logWorkout("gym", m, W.name); bell(262, 0.12, 4); toast("Szép munka! Edzés mentve."); location.hash = "#mozgas";
+        logWorkout("gym", m, W.name + (adjusted ? " (igazítva)" : "")); bell(262, 0.12, 4); toast("Szép munka! Edzés mentve."); location.hash = "#mozgas";
       };
+      draw();
       onCleanup(() => { clearInterval(tick); clearInterval(rest); });
     });
     return `<div class="col">
       <nav class="crumbs"><a href="#mozgas">Mozgás</a><span>/</span><span>Edzés</span></nav>
       <div class="row between"><h1>${W.name}</h1><span class="chip num" id="gel">0:00</span></div>
       <p class="small muted">${icn("timer", 15)} Bemelegítés: ${W.warm}</p>
-      <section class="card stack" style="gap:0">${W.ex.map(([n, s, r], e) => `<div class="exrow" id="ex-${e}"><div class="stack" style="gap:0"><b>${n}</b><span class="small muted">${s} × ${r}</span></div>
-        <div class="sets">${Array.from({ length: s }, (_, k) => `<button type="button" data-e="${e}" aria-label="${n}, ${k + 1}. sorozat">${k + 1}</button>`).join("")}</div></div>`).join("")}</section>
-      <div class="row"><button class="btn" id="gdone">Edzés kész</button><span class="small muted">Koppints a kész sorozatra, és indul a pihenő.</span></div>
+      ${aiOn() ? `<details class="card ai-card" id="gadjcard"><summary>${sp(16)} Igazítsd a mai napomhoz</summary>
+        <div class="stack" style="margin-top:12px">
+          <div class="row"><span class="small muted" style="min-width:4.5rem">Időm</span><div class="pills" id="gmin">${[20, 30, 45, 60].map((x) => `<button type="button">${x}</button>`).join("")}</div><span class="small muted">perc</span></div>
+          <div class="row"><span class="small muted" style="min-width:4.5rem">Energiám</span><div class="pills" id="gen">${["Fáradt", "Rendben", "Fitt"].map((x) => `<button type="button">${x}</button>`).join("")}</div></div>
+          <div><button type="button" class="btn ai sm" id="gadj">${sp(16)} Igazítsd</button></div>
+        </div></details>` : ""}
+      <div class="ai-out" id="gnote" hidden></div>
+      <section class="card stack" style="gap:0" id="exlist"></section>
+      <div class="row"><button class="btn" id="gdone">Edzés kész</button><span class="small muted">Koppints a kész sorozatra, és indul a pihenő.${aiOn() ? " A ✦ gombbal cserélhetsz gyakorlatot." : ""}</span></div>
       <div class="restpill" id="rest" hidden>${icn("timer", 18)} Pihenő <b class="num" id="rl"></b> mp <button type="button" id="rskip">Tovább</button></div>
     </div>`;
   }
-
   /* ---------- futás–séta intervallum ---------- */
   function vRun(n) {
     const R = RUN[n]; const [warm, reps, run, walk, cool] = R.p;
@@ -1112,7 +1286,9 @@
   /* =================================================================
      NAPLÓ
      ================================================================= */
+  const entryLabel = (e) => (e.type === "naplo" ? "Napló" : e.type === "ai" ? e.title || "AI" : WIZ[e.type].title);
   function entryText(e) {
+    if (e.type === "ai") return e.text || "";
     if (e.type === "naplo") return [e.mood ? "Hangulat: " + CK.moods[e.mood - 1].l : "", e.emotions && e.emotions.length ? "Érzések: " + e.emotions.join(", ") : "", e.good && e.good.filter(Boolean).length ? "Hálás vagyok: " + e.good.filter(Boolean).join("; ") : "", e.text || ""].filter(Boolean).join("\n");
     const W = WIZ[e.type]; return W.sum.filter(([k]) => e.data[k] && String(e.data[k]).length).map(([k, l]) => `${l}: ${Array.isArray(e.data[k]) ? e.data[k].join(", ") : e.data[k]}`).join("\n");
   }
@@ -1132,15 +1308,27 @@
       }));
       $$(".entry [data-del]", v).forEach((b) => b.addEventListener("click", () => { S.journal = S.journal.filter((e) => String(e.id) !== b.dataset.del); save(); route(); }));
       $$(".entry [data-keep]", v).forEach((b) => b.addEventListener("click", () => { b.closest(".confirm").hidden = true; }));
+      let review = "";
+      aiWire($("#jrevb", v), $("#jrev", v), async () => {
+        const wk = Array.from({ length: 7 }, (_, k) => dstr(new Date(Date.now() - k * 864e5)));
+        const js = S.journal.filter((e) => wk.includes(e.date) && e.type !== "ai").map((e) => `${huDate(e.date)} – ${entryLabel(e)}: ${clip(entryText(e), 500)}`).join("\n");
+        const ws = S.workouts.filter((w) => wk.includes(w.date)).map((w) => `${huDate(w.date)}: ${w.name || w.type}, ${w.min} perc`).join("; ");
+        const ls = Object.entries(S.done).filter(([, d]) => wk.includes(d)).map(([id]) => LESSON[id] ? LESSON[id].title : "").filter(Boolean).join(", ");
+        const hb = wk.reduce((s, d) => s + Object.values(S.habits[d] || {}).filter(Boolean).length, 0);
+        if (!js && !ws && !ls) { toast("Ezen a héten még nincs miből összefoglalni."); return null; }
+        review = await aiAsk(`Írj nekem kedves, őszinte heti visszatekintést (legfeljebb 4 rövid bekezdés): mi ment jól, milyen mintázatot látsz (hangulat, mozgás, gyakorlás összefüggései), és egyetlen konkrét javaslat a következő hétre.\n\nNaplóbejegyzések:\n${js || "nincs"}\n\nEdzések: ${ws || "nincs"} (heti cél: ${S.moveGoal || 3})\nElvégzett leckék: ${ls || "nincs"}\nKipipált szokások összesen: ${hb}`);
+        $("#jrevsave", v).hidden = false; return review;
+      });
+      $("#jrevsave", v) && ($("#jrevsave", v).onclick = () => { if (!review) return; S.journal.unshift({ id: Date.now(), date: today(), type: "ai", title: "Heti visszatekintés", text: review }); save(); toast("Elmentve a naplóba."); route(); });
       const cp = $("#copy", v);
       if (cp) cp.addEventListener("click", () => {
-        const txt = S.journal.map((e) => `${huDate(e.date)} – ${e.type === "naplo" ? "Napló" : WIZ[e.type].title}\n${entryText(e)}`).join("\n\n");
+        const txt = S.journal.map((e) => `${huDate(e.date)} – ${entryLabel(e)}\n${entryText(e)}`).join("\n\n");
         const fallback = () => { const ta = $("#copyta", v); ta.hidden = false; ta.value = txt; ta.select(); toast("Jelöld ki és másold a szöveget."); };
         try { navigator.clipboard.writeText(txt).then(() => toast("A napló a vágólapra került."), fallback); } catch (e) { fallback(); }
       });
     });
     const reflections = Object.entries(S.reflect).filter(([, o]) => Object.values(o).some((x) => x && x.trim()));
-    const label = (e) => (e.type === "naplo" ? "Napló" : WIZ[e.type].title);
+    const label = entryLabel;
     return `<div class="col">
       <div class="stack"><span class="eyebrow">${huDate(today())}</span><h1>Napló</h1></div>
       <section class="card stack">
@@ -1151,6 +1339,7 @@
         <div><label class="q" for="jt">Gondolatok</label><textarea id="jt" placeholder="Mi volt nehéz? Mire vagy büszke?"></textarea></div>
         <div class="row"><button class="btn" id="jsave">Mentés</button></div>
       </section>
+      ${aiOn() ? `<section class="card stack ai-card"><div class="row between"><b>Heti visszatekintés</b>${aiBtn("jrevb", "Összefoglaló")}</div>${aiBox("jrev")}<div><button type="button" class="btn ghost sm" id="jrevsave" hidden>Mentés a naplóba</button></div></section>` : ""}
       <section class="stack"><div class="row between"><h2>Korábbi bejegyzések</h2>${S.journal.length ? '<button class="btn ghost sm" id="copy">Másolás</button>' : ""}</div>
         <textarea id="copyta" hidden readonly style="min-height:160px"></textarea>
         ${S.journal.length ? `<div class="card" style="padding-block:4px">${S.journal.map((e) => `<div class="entry">
@@ -1172,6 +1361,7 @@
       $("#nm", v).addEventListener("change", (e) => { S.name = e.target.value.trim(); save(); toast("Elmentve."); });
       $("#snd", v).addEventListener("change", (e) => { S.sound = e.target.checked; save(); });
       $(".mus", v).addEventListener("change", (e) => setMusic(e.target.checked));
+      const ao = $("#aion", v); if (ao) ao.addEventListener("change", (e) => { S.aiOn = e.target.checked; save(); });
       $("#testbell", v).addEventListener("click", () => { const o = S.sound; S.sound = true; bell(); S.sound = o; });
       $("#reset", v).addEventListener("click", () => ($("#rconf", v).hidden = false));
       $("#rno", v).addEventListener("click", () => ($("#rconf", v).hidden = true));
@@ -1204,6 +1394,7 @@
       <section class="card stack"><div><label class="q" for="nm">Neved</label><input type="text" id="nm" value="${esc(S.name)}" style="max-width:20rem"></div>
         <label class="toggle"><input type="checkbox" class="mus" ${S.music ? "checked" : ""}> Háttérzene</label>
         <label class="toggle"><input type="checkbox" id="snd" ${S.sound ? "checked" : ""}> Hangjelzések</label>
+        ${window.CK_SYNC && window.CK_SYNC.ai ? `<label class="toggle"><input type="checkbox" id="aion" ${S.aiOn !== false ? "checked" : ""}> AI-funkciók (Gemini, csak gombnyomásra küld)</label>` : ""}
         <div><button class="btn ghost sm" id="testbell">Tálhang kipróbálása</button></div></section>
       ${Sync.enabled ? `<section class="card stack"><h3>Szinkronizálás</h3><div class="stack" id="sync"></div></section>` : ""}
       <section class="card stack"><h3>Adatok</h3><p class="small muted">${Sync.enabled ? "Ebben a böngészőben és belépve a fiókodban tárolódnak. Csak te látod." : "Csak ebben a böngészőben tárolódnak."}</p>
